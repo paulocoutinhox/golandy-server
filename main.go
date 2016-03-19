@@ -112,5 +112,5 @@ func main() {
 	r.HandleFunc("/ws", remoteHandler)
 
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./public/")))
-	http.ListenAndServe(":3000", r)
+	http.ListenAndServe(":3030", r)
 }

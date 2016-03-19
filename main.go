@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+	"sync"
 )
 
 type Message struct {
@@ -24,10 +25,17 @@ type Player struct {
 	X      int             // X position
 	Id     string          // a unique id to identify the player by the frontend
 	Socket *websocket.Conn // websocket connection of the player
+	mu      sync.Mutex
 }
 
 func (p *Player) position(new bool) Message {
 	return Message{X: p.X, Y: p.Y, Id: p.Id, New: new, Online: true}
+}
+
+func (p *Player) send(v interface{}) error {
+    p.mu.Lock()
+    defer p.mu.Unlock()
+    return p.Socket.WriteJSON(v)
 }
 
 // a slice of *Players which will store the list of connected players
@@ -60,10 +68,10 @@ func remoteHandler(res http.ResponseWriter, req *http.Request) {
 	go func() {
 		for _, p := range Players {
 			if p.Socket.RemoteAddr() != player.Socket.RemoteAddr() {
-				if err = player.Socket.WriteJSON(p.position(true)); err != nil {
+				if err = player.send(p.position(true)); err != nil {
 					log.Println(err)
 				}
-				if err = p.Socket.WriteJSON(player.position(true)); err != nil {
+				if err = p.send(player.position(true)); err != nil {
 					log.Println(err)
 				}
 			}
@@ -83,7 +91,7 @@ func remoteHandler(res http.ResponseWriter, req *http.Request) {
 					Players = append(Players[:i], Players[i+1:]...)
 				} else {
 					log.Println("destroy player", player)
-					if err = p.Socket.WriteJSON(Message{Online: false, Id: player.Id}); err != nil {
+					if err = p.send(Message{Online: false, Id: player.Id}); err != nil {
 						log.Println(err)
 					}
 				}
@@ -97,7 +105,7 @@ func remoteHandler(res http.ResponseWriter, req *http.Request) {
 		go func() {
 			for _, p := range Players {
 				if p.Socket.RemoteAddr() != player.Socket.RemoteAddr() {
-					if err = p.Socket.WriteJSON(player.position(false)); err != nil {
+					if err = p.send(player.position(false)); err != nil {
 						log.Println(err)
 					}
 				}

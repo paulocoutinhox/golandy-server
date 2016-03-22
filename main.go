@@ -2,22 +2,40 @@ package main
 
 import (
 	"github.com/pborman/uuid"
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"sync"
+	"fmt"
+	"encoding/json"
 )
 
+var wsUpgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		// valida a origem - desabilitado por enquanto
+		/*
+		if r.Header.Get("Origin") != "http://" + r.Host {
+			return false
+		}
+		*/
+		return true
+	},
+}
+
+var Players = make([]*Player, 0)
+
 type Message struct {
-	Y   int    // current Y position
-	X   int    // as above
-	Id  string // the id of the player that sent the message
-	New bool   // true if this player just connected so we know when to
-	// spawn a new sprite on the screens of the other players. for all subsequent
-	// messages it's false
-	Online bool // true if the player is no longer connected so the frontend
-	// will remove it's sprite
+	Y      int    // current Y position
+	X      int    // as above
+	Id     string // the id of the player that sent the message
+	New    bool   // true if this player just connected so we know when to
+                  // spawn a new sprite on the screens of the other players. for all subsequent
+                  // messages it's false
+	Online bool   // true if the player is no longer connected so the frontend
+                  // will remove it's sprite
 }
 
 type Player struct {
@@ -25,7 +43,11 @@ type Player struct {
 	X      int             // X position
 	Id     string          // a unique id to identify the player by the frontend
 	Socket *websocket.Conn // websocket connection of the player
-	mu      sync.Mutex
+	mu     sync.Mutex
+}
+
+func debug(message string) {
+	log.Printf("> %s\n", message);
 }
 
 func (p *Player) position(new bool) Message {
@@ -33,80 +55,100 @@ func (p *Player) position(new bool) Message {
 }
 
 func (p *Player) send(v interface{}) error {
-    p.mu.Lock()
-    defer p.mu.Unlock()
-    return p.Socket.WriteJSON(v)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.Socket.WriteJSON(v)
 }
 
 // a slice of *Players which will store the list of connected players
-var Players = make([]*Player, 0)
+func wsHandler(w http.ResponseWriter, r *http.Request) {
+	// faz o upgrade da conexão pra websocket
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
 
-func remoteHandler(res http.ResponseWriter, req *http.Request) {
-	var err error
-
-	//when someone requires a ws connection we create a new player and store a
-	// pointer to the connection inside player.Socket
-	ws, err := websocket.Upgrade(res, req, nil, 1024, 1024)
-	if _, ok := err.(websocket.HandshakeError); ok {
-		http.Error(res, "Not a websocket handshake", 400)
-		return
-	} else if err != nil {
-		log.Println(err)
+	if err != nil {
+		debug(fmt.Sprintf("Failed to set websocket upgrade: %v", err))
 		return
 	}
 
-	log.Printf("got websocket conn from %v\n", ws.RemoteAddr())
+	debug(fmt.Sprintf("New connection from: %+v", conn.RemoteAddr()))
+
+	// cria o novo player
 	player := new(Player)
 	player.Id = uuid.New()
-	player.Socket = ws
+	player.Socket = conn
 
-	// we broadcast the position of the new player to alredy connected
-	// players (if any) and viceversa, we tell the player where to spawn already
-	// existing players
-	log.Println("Publishing positions")
+	Players = append(Players, player)
+
+	debug(fmt.Sprintf("New player: %v", player))
+
+	// envia a posição do novo player para todos
+	debug("Publishing positions...")
 
 	go func() {
 		for _, p := range Players {
 			if p.Socket.RemoteAddr() != player.Socket.RemoteAddr() {
 				if err = player.send(p.position(true)); err != nil {
-					log.Println(err)
+					debug(fmt.Sprintf("Error on send command: %v", err))
 				}
+
 				if err = p.send(player.position(true)); err != nil {
-					log.Println(err)
+					debug(fmt.Sprintf("Error on send command: %v", err))
 				}
 			}
 		}
 	}()
 
-	// we append the new player to Players slice
-	Players = append(Players, player)
+	debug("Published")
+
 	for {
-		// if a network error occurs (aka someone closed the game) we let
-		// the other players know to despawn his sprite (Online: false) and
-		// remove him from the slice so no further updates will be sent
-		if err = player.Socket.ReadJSON(&player); err != nil {
-			log.Println("Player Disconnected waiting", err)
+		messageType, message, err := conn.ReadMessage()
+
+		if err != nil {
+			debug(fmt.Sprintf("Error on player: %v", err))
+
+			// erro no socket e foi desconectado - envia essa informação para todos
 			for i, p := range Players {
-				if p.Socket.RemoteAddr() == player.Socket.RemoteAddr() {
-					Players = append(Players[:i], Players[i+1:]...)
+				if p.Id == player.Id {
+					Players = append(Players[:i], Players[i + 1:]...)
 				} else {
-					log.Println("destroy player", player)
+					debug(fmt.Sprintf("Destroy player: %v", player))
+
 					if err = p.send(Message{Online: false, Id: player.Id}); err != nil {
-						log.Println(err)
+						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
 				}
 			}
-			log.Println("Number of players still connected ...", len(Players))
-			return
+
+			debug(fmt.Sprintf("Players connected: %v", len(Players)))
+
+			break
 		}
 
-		// a regular broadcast to inform all the players about a player's
-		// position update
+		debug(fmt.Sprintf("Message received: %v - %v", messageType, string(message)))
+
+		var messageData map[string]interface{}
+
+		if err := json.Unmarshal(message, &messageData); err != nil {
+			debug(fmt.Sprintf("Erro while decode message: %v", err))
+		} else {
+			messageDataType := messageData["type"]
+
+			if messageDataType == "pos" {
+				if value, ok := messageData["x"]; ok {
+					player.X = int(value.(float64))
+				}
+
+				if value, ok := messageData["y"]; ok {
+					player.Y = int(value.(float64))
+				}
+			}
+		}
+
 		go func() {
 			for _, p := range Players {
-				if p.Socket.RemoteAddr() != player.Socket.RemoteAddr() {
+				if p.Id != player.Id {
 					if err = p.send(player.position(false)); err != nil {
-						log.Println(err)
+						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
 				}
 
@@ -116,9 +158,16 @@ func remoteHandler(res http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	r := mux.NewRouter()
-	r.HandleFunc("/ws", remoteHandler)
+	gin.SetMode(gin.ReleaseMode)
 
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./public/")))
-	http.ListenAndServe(":3030", r)
+	r := gin.New()
+	r.Use(gin.Recovery())
+
+	r.GET("/ws", func(c *gin.Context) {
+		wsHandler(c.Writer, c.Request)
+	})
+
+	r.Static("/static", "public")
+
+	r.Run(":3030")
 }

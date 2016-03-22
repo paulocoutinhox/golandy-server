@@ -19,7 +19,7 @@ test:
 
 deps:
 	${GODEPS} github.com/pborman/uuid
-	${GODEPS} github.com/gorilla/mux
+	${GODEPS} github.com/gin-gonic/gin
 	${GODEPS} github.com/gorilla/websocket
 
 stop:

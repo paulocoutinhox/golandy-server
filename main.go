@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var appVersion = "1.0"
+var appVersion = "1.0.1"
 var validateOrigin = false
 
 var wsUpgrader = websocket.Upgrader{

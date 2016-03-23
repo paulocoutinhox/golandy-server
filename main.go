@@ -44,6 +44,11 @@ type PlayerPositionMessage struct {
 	Online bool `json:"online"`
 }
 
+type PlayerRemoveMessage struct {
+	Type string `json:"type"`
+	Id   string `json:"id"`
+}
+
 type PlayerInvalidPositionMessage struct {
 	Type string `json:"type"`
 	Id   string `json:"id"`
@@ -94,6 +99,14 @@ func (p *Player) createPlayerDataMessage() PlayerDataMessage {
 	return PlayerDataMessage{Type: "player-data", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay}
 }
 
+func (p *Player) createNewPlayerMessage() PlayerDataMessage {
+	return PlayerDataMessage{Type: "player-new", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay}
+}
+
+func (p *Player) createRemovePlayerMessage() PlayerRemoveMessage {
+	return PlayerRemoveMessage{Type: "player-remove", Id: p.Id}
+}
+
 func (p *Player) send(v interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -133,44 +146,24 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	player.MovementDelay = 200;
 	player.LastMovementTime = time.Now();
 
-	Players = append(Players, player)
-
-	debug(fmt.Sprintf("New player: %v", player))
-
-	// envia a posição do novo player para todos
-	debug("Publishing positions...")
-
-	go func() {
-		for _, p := range Players {
-			if p.Socket.RemoteAddr() != player.Socket.RemoteAddr() {
-				if err = player.send(p.createPositionMessage(true)); err != nil {
-					debug(fmt.Sprintf("Error on send command: %v", err))
-				}
-
-				if err = p.send(player.createPositionMessage(true)); err != nil {
-					debug(fmt.Sprintf("Error on send command: %v", err))
-				}
-			}
-		}
-	}()
-
 	// listen para comandos ou erros
-	debug("Published")
-
 	for {
 		messageType, message, err := conn.ReadMessage()
 
 		if err != nil {
 			debug(fmt.Sprintf("Error on player: %v", err))
 
+			// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 			// erro no socket e foi desconectado - envia essa informação para todos
+			// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 			for i, p := range Players {
 				if p.Id == player.Id {
 					Players = append(Players[:i], Players[i + 1:]...)
 				} else {
 					debug(fmt.Sprintf("Destroy player: %v", player))
 
-					if err = p.send(PlayerPositionMessage{Online: false, Id: player.Id}); err != nil {
+					if err = p.send(player.createRemovePlayerMessage()); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
 				}
@@ -246,11 +239,34 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				if username == "demo" && password == "demo" {
-					debug(fmt.Sprintf("Player do login with success: %v - %v", username, password))
+					// cria o novo player
+					debug(fmt.Sprintf("New player logged: %v - %v", username, password))
+
+					Players = append(Players, player)
+					debug(fmt.Sprintf("New player: %v", player))
 
 					if err = player.send(player.createPlayerDataMessage()); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
+
+					// envia a posição do novo player para todos
+					debug("Publishing positions...")
+
+					go func() {
+						for _, p := range Players {
+							if p.Id != player.Id {
+								if err = player.send(p.createNewPlayerMessage()); err != nil {
+									debug(fmt.Sprintf("Error on send command: %v", err))
+								}
+
+								if err = p.send(player.createNewPlayerMessage()); err != nil {
+									debug(fmt.Sprintf("Error on send command: %v", err))
+								}
+							}
+						}
+					}()
+
+					debug("Published")
 				} else {
 					debug(fmt.Sprintf("Player is trying do login with a invalid username and password: %v - %v", username, password))
 

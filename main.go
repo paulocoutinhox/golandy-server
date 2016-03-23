@@ -36,12 +36,11 @@ type SimpleMessage struct {
 }
 
 type PlayerPositionMessage struct {
-	Type   string `json:"type"`
-	Id     string `json:"id"`
-	X      int `json:"x"`
-	Y      int `json:"y"`
-	New    bool `json:"new"`
-	Online bool `json:"online"`
+	Type      string `json:"type"`
+	Id        string `json:"id"`
+	X         int `json:"x"`
+	Y         int `json:"y"`
+	Direction int `json:"direction"`
 }
 
 type PlayerRemoveMessage struct {
@@ -88,7 +87,7 @@ func (p *Player) createSimpleMessage(messageType string) SimpleMessage {
 }
 
 func (p *Player) createPositionMessage(new bool) PlayerPositionMessage {
-	return PlayerPositionMessage{Type: "pos", X: p.X, Y: p.Y, Id: p.Id, New: new, Online: true}
+	return PlayerPositionMessage{Type: "pos", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction}
 }
 
 func (p *Player) createInvalidPositionMessage() PlayerInvalidPositionMessage {
@@ -197,6 +196,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 					if value, ok := messageData["y"]; ok {
 						player.Y = int(value.(float64))
+					}
+
+					if value, ok := messageData["direction"]; ok {
+						player.Direction = int(value.(float64))
 					}
 
 					if err = player.send(player.createSimpleMessage("pos-ok")); err != nil {

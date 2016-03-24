@@ -11,10 +11,13 @@ import (
 	"encoding/json"
 	"time"
 	"math/rand"
+	"os"
+	"io/ioutil"
 )
 
-var appVersion = "1.0.6"
+var appVersion = "1.0.7"
 var validateOrigin = false
+var maps = make(map[string]*Map)
 
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -31,6 +34,41 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 var Players = make([]*Player, 0)
+
+type Map struct {
+	Height       int `json:"height"`
+	Layers       []struct {
+		Data    []int  `json:"data"`
+		Height  int    `json:"height"`
+		Name    string `json:"name"`
+		Opacity int    `json:"opacity"`
+		Type    string `json:"type"`
+		Visible bool   `json:"visible"`
+		Width   int    `json:"width"`
+		X       int    `json:"x"`
+		Y       int    `json:"y"`
+	} `json:"layers"`
+	Nextobjectid int    `json:"nextobjectid"`
+	Orientation  string `json:"orientation"`
+	Renderorder  string `json:"renderorder"`
+	Tileheight   int    `json:"tileheight"`
+	Tilesets     []struct {
+		Columns     int    `json:"columns"`
+		Firstgid    int    `json:"firstgid"`
+		Image       string `json:"image"`
+		Imageheight int    `json:"imageheight"`
+		Imagewidth  int    `json:"imagewidth"`
+		Margin      int    `json:"margin"`
+		Name        string `json:"name"`
+		Spacing     int    `json:"spacing"`
+		Tilecount   int    `json:"tilecount"`
+		Tileheight  int    `json:"tileheight"`
+		Tilewidth   int    `json:"tilewidth"`
+	} `json:"tilesets"`
+	Tilewidth    int `json:"tilewidth"`
+	Version      int `json:"version"`
+	Width        int `json:"width"`
+}
 
 type SimpleMessage struct {
 	Type string `json:"type"`
@@ -50,10 +88,11 @@ type PlayerRemoveMessage struct {
 }
 
 type PlayerInvalidPositionMessage struct {
-	Type string `json:"type"`
-	Id   string `json:"id"`
-	X    int `json:"x"`
-	Y    int `json:"y"`
+	Type      string `json:"type"`
+	Id        string `json:"id"`
+	X         int `json:"x"`
+	Y         int `json:"y"`
+	Direction int `json:"direction"`
 }
 
 type PlayerDataMessage struct {
@@ -99,7 +138,7 @@ func (p *Player) createPositionMessage(new bool) PlayerPositionMessage {
 }
 
 func (p *Player) createInvalidPositionMessage() PlayerInvalidPositionMessage {
-	return PlayerInvalidPositionMessage{Type: "move-invalid", X: p.X, Y: p.Y, Id: p.Id}
+	return PlayerInvalidPositionMessage{Type: "move-invalid", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction}
 }
 
 func (p *Player) createPlayerDataMessage() PlayerDataMessage {
@@ -128,6 +167,17 @@ func (p *Player) canMove() bool {
 	seconds := time.Now().Sub(p.LastMovementTime).Seconds()
 	ms := seconds * 1000
 	return (ms > p.MovementDelay)
+}
+
+func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
+	var idx int = toX + toY * maps[p.Map].Layers[0].Width
+	var gid = maps[p.Map].Layers[0].Data[idx]
+
+	if gid > 0 {
+		return false
+	}
+
+	return true
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -199,20 +249,32 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				if player.canMove() {
 					player.updateLastMovementTime()
 
+					var toX, toY, toDirection int
+
 					if value, ok := messageData["x"]; ok {
-						player.X = int(value.(float64))
+						toX = int(value.(float64))
 					}
 
 					if value, ok := messageData["y"]; ok {
-						player.Y = int(value.(float64))
+						toY = int(value.(float64))
 					}
 
 					if value, ok := messageData["direction"]; ok {
-						player.Direction = int(value.(float64))
+						toDirection = int(value.(float64))
 					}
 
-					if err = player.send(player.createSimpleMessage("move-ok")); err != nil {
-						debug(fmt.Sprintf("Error on send command: %v", err))
+					if player.canMoveTo(toX, toY, toDirection) {
+						player.X = toX
+						player.Y = toY
+						player.Direction = toDirection
+
+						if err = player.send(player.createSimpleMessage("move-ok")); err != nil {
+							debug(fmt.Sprintf("Error on send command: %v", err))
+						}
+					} else {
+						if err = player.send(player.createInvalidPositionMessage()); err != nil {
+							debug(fmt.Sprintf("Error on send command: %v", err))
+						}
 					}
 				} else {
 					if err = player.send(player.createInvalidPositionMessage()); err != nil {
@@ -315,7 +377,56 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func loadMaps() {
+	/*
+	r, err := os.Open("maps/map1.tmx")
+
+	if err != nil {
+		debug(fmt.Sprintf("Failed to load map: %v", err))
+	}
+
+	m, err := tmx.Read(r)
+
+	if err != nil {
+		debug(fmt.Sprintf("Failed to read map: %v", err))
+	}
+
+	maps["001"] = m
+
+	for _, currentMap := range maps {
+		for currentLayerKey, currentLayer := range currentMap.Layers {
+			if currentLayer.Name != "Meta" {
+				currentMap.Layers = append(currentMap.Layers[:currentLayerKey], currentMap.Layers[currentLayerKey+1:]...)
+			}
+		}
+	}
+	*/
+
+	file, err := ioutil.ReadFile("maps/map1.json")
+
+	if err != nil {
+		debug(fmt.Sprintf("Failed to load map: %v", err))
+		os.Exit(1)
+	}
+
+	var m Map
+	json.Unmarshal(file, &m)
+	//fmt.Println(&m.Layers[0].Name)
+
+	maps["001"] = &m
+
+	for _, currentMap := range maps {
+		for currentLayerKey, currentLayer := range currentMap.Layers {
+			if currentLayer.Name != "Meta" {
+				currentMap.Layers = append(currentMap.Layers[:currentLayerKey], currentMap.Layers[currentLayerKey + 1:]...)
+			}
+		}
+	}
+}
+
 func main() {
+	loadMaps();
+
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()

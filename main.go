@@ -10,9 +10,10 @@ import (
 	"fmt"
 	"encoding/json"
 	"time"
+	"math/rand"
 )
 
-var appVersion = "1.0.5"
+var appVersion = "1.0.6"
 var validateOrigin = false
 
 var wsUpgrader = websocket.Upgrader{
@@ -63,6 +64,7 @@ type PlayerDataMessage struct {
 	CharType      string `json:"charType"`
 	Direction     int `json:"direction"`
 	MovementDelay float64 `json:"movementDelay"`
+	Map           string `json:"map"`
 }
 
 type Player struct {
@@ -73,6 +75,7 @@ type Player struct {
 	Direction        int
 	MovementDelay    float64
 	LastMovementTime time.Time
+	Map              string
 
 	Socket           *websocket.Conn
 	mu               sync.Mutex
@@ -82,24 +85,29 @@ func debug(message string) {
 	log.Printf("> %s\n", message);
 }
 
+func randomInt(min, max int) int {
+	rand.Seed(time.Now().Unix())
+	return rand.Intn(max - min) + min
+}
+
 func (p *Player) createSimpleMessage(messageType string) SimpleMessage {
 	return SimpleMessage{Type: messageType}
 }
 
 func (p *Player) createPositionMessage(new bool) PlayerPositionMessage {
-	return PlayerPositionMessage{Type: "pos", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction}
+	return PlayerPositionMessage{Type: "move", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction}
 }
 
 func (p *Player) createInvalidPositionMessage() PlayerInvalidPositionMessage {
-	return PlayerInvalidPositionMessage{Type: "pos-invalid", X: p.X, Y: p.Y, Id: p.Id}
+	return PlayerInvalidPositionMessage{Type: "move-invalid", X: p.X, Y: p.Y, Id: p.Id}
 }
 
 func (p *Player) createPlayerDataMessage() PlayerDataMessage {
-	return PlayerDataMessage{Type: "player-data", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay}
+	return PlayerDataMessage{Type: "player-data", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay, Map: p.Map}
 }
 
 func (p *Player) createNewPlayerMessage() PlayerDataMessage {
-	return PlayerDataMessage{Type: "player-new", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay}
+	return PlayerDataMessage{Type: "player-new", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay, Map: p.Map}
 }
 
 func (p *Player) createRemovePlayerMessage() PlayerRemoveMessage {
@@ -142,8 +150,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	player.Direction = 3
 	player.X = 3;
 	player.Y = 4;
-	player.MovementDelay = 200;
+	player.MovementDelay = float64(randomInt(50, 200));
 	player.LastMovementTime = time.Now();
+	player.Map = "001";
 
 	// listen para comandos ou erros
 	for {
@@ -182,9 +191,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			messageDataType := messageData["type"]
 
-			if messageDataType == "pos" {
+			if messageDataType == "move" {
 				// ++++++++++++++++++++++++++++++++++++++++++
-				// pos = posição do personagem
+				// move = posição do personagem
 				// ++++++++++++++++++++++++++++++++++++++++++
 
 				if player.canMove() {
@@ -202,7 +211,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 						player.Direction = int(value.(float64))
 					}
 
-					if err = player.send(player.createSimpleMessage("pos-ok")); err != nil {
+					if err = player.send(player.createSimpleMessage("move-ok")); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
 				} else {
@@ -248,28 +257,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					Players = append(Players, player)
 					debug(fmt.Sprintf("New player: %v", player))
 
-					if err = player.send(player.createPlayerDataMessage()); err != nil {
+					if err = player.send(player.createSimpleMessage("login-ok")); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
-
-					// envia a posição do novo player para todos
-					debug("Publishing positions...")
-
-					go func() {
-						for _, p := range Players {
-							if p.Id != player.Id {
-								if err = player.send(p.createNewPlayerMessage()); err != nil {
-									debug(fmt.Sprintf("Error on send command: %v", err))
-								}
-
-								if err = p.send(player.createNewPlayerMessage()); err != nil {
-									debug(fmt.Sprintf("Error on send command: %v", err))
-								}
-							}
-						}
-					}()
-
-					debug("Published")
 				} else {
 					debug(fmt.Sprintf("Player is trying do login with a invalid username and password: %v - %v", username, password))
 
@@ -279,6 +269,36 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 					player.Socket.Close()
 				}
+			} else if messageDataType == "game-data" {
+				// ++++++++++++++++++++++++++++++++++++++++++
+				// game-data = dados do jogo
+				// ++++++++++++++++++++++++++++++++++++++++++
+				debug("Sending player data...")
+
+				if err = player.send(player.createPlayerDataMessage()); err != nil {
+					debug(fmt.Sprintf("Error on send command: %v", err))
+				}
+
+				debug("Sent")
+
+				// envia a posição do novo player para todos
+				debug("Publishing positions...")
+
+				go func() {
+					for _, p := range Players {
+						if p.Id != player.Id {
+							if err = player.send(p.createNewPlayerMessage()); err != nil {
+								debug(fmt.Sprintf("Error on send command: %v", err))
+							}
+
+							if err = p.send(player.createNewPlayerMessage()); err != nil {
+								debug(fmt.Sprintf("Error on send command: %v", err))
+							}
+						}
+					}
+				}()
+
+				debug("Published")
 			}
 		}
 

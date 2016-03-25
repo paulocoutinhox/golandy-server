@@ -183,7 +183,7 @@ func (p *Player) canMove() bool {
 }
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
-	var idx int = toX + toY * maps[p.Map].Layers[0].Width
+	var idx = toX + toY * maps[p.Map].Layers[0].Width
 	var gid = maps[p.Map].Layers[0].Data[idx]
 
 	if gid > 0 {
@@ -391,30 +391,6 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loadMaps() {
-	/*
-	r, err := os.Open("maps/map1.tmx")
-
-	if err != nil {
-		debug(fmt.Sprintf("Failed to load map: %v", err))
-	}
-
-	m, err := tmx.Read(r)
-
-	if err != nil {
-		debug(fmt.Sprintf("Failed to read map: %v", err))
-	}
-
-	maps["001"] = m
-
-	for _, currentMap := range maps {
-		for currentLayerKey, currentLayer := range currentMap.Layers {
-			if currentLayer.Name != "Meta" {
-				currentMap.Layers = append(currentMap.Layers[:currentLayerKey], currentMap.Layers[currentLayerKey+1:]...)
-			}
-		}
-	}
-	*/
-
 	file, err := ioutil.ReadFile("maps/map1.json")
 
 	if err != nil {
@@ -424,7 +400,6 @@ func loadMaps() {
 
 	var m Map
 	json.Unmarshal(file, &m)
-	//fmt.Println(&m.Layers[0].Name)
 
 	maps["001"] = &m
 

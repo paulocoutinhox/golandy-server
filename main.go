@@ -15,7 +15,7 @@ import (
 	"io/ioutil"
 )
 
-var appVersion = "1.0.7"
+var appVersion = "1.0.8"
 var validateOrigin = false
 var maps = make(map[string]*Map)
 
@@ -164,9 +164,10 @@ func (p *Player) updateLastMovementTime() {
 }
 
 func (p *Player) canMove() bool {
-	seconds := time.Now().Sub(p.LastMovementTime).Seconds()
-	ms := seconds * 1000
-	return (ms > p.MovementDelay)
+	currentMS := time.Now().UnixNano() / int64(time.Millisecond)
+	lastMovementMS := p.LastMovementTime.UnixNano() / int64(time.Millisecond)
+	ms := currentMS - lastMovementMS
+	return (ms > int64(p.MovementDelay))
 }
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {

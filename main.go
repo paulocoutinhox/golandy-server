@@ -178,14 +178,13 @@ func (p *Player) updateLastMovementTime() {
 	p.LastMovementTime = time.Now()
 }
 
-func (p *Player) canMove() bool {
+func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
+	// valida o tempo
 	currentMS := time.Now().UnixNano() / int64(time.Millisecond)
 	lastMovementMS := p.LastMovementTime.UnixNano() / int64(time.Millisecond)
 	ms := currentMS - lastMovementMS
 	return (ms > int64(p.MovementDelay))
-}
 
-func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	// valida o tile
 	var idx = toX + toY * maps[p.Map].Layers[0].Width
 	var gid = maps[p.Map].Layers[0].Data[idx]
@@ -273,36 +272,29 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				// ++++++++++++++++++++++++++++++++++++++++++
 				// move = posição do personagem
 				// ++++++++++++++++++++++++++++++++++++++++++
+				var toX, toY, toDirection int
 
-				if player.canMove() {
+				if value, ok := messageData["x"]; ok {
+					toX = int(value.(float64))
+				}
+
+				if value, ok := messageData["y"]; ok {
+					toY = int(value.(float64))
+				}
+
+				if value, ok := messageData["direction"]; ok {
+					toDirection = int(value.(float64))
+				}
+
+				if player.canMoveTo(toX, toY, toDirection) {
 					player.updateLastMovementTime()
 
-					var toX, toY, toDirection int
+					player.X = toX
+					player.Y = toY
+					player.Direction = toDirection
 
-					if value, ok := messageData["x"]; ok {
-						toX = int(value.(float64))
-					}
-
-					if value, ok := messageData["y"]; ok {
-						toY = int(value.(float64))
-					}
-
-					if value, ok := messageData["direction"]; ok {
-						toDirection = int(value.(float64))
-					}
-
-					if player.canMoveTo(toX, toY, toDirection) {
-						player.X = toX
-						player.Y = toY
-						player.Direction = toDirection
-
-						if err = player.send(player.createPlayerMoveOkMessage()); err != nil {
-							debug(fmt.Sprintf("Error on send command: %v", err))
-						}
-					} else {
-						if err = player.send(player.createInvalidPositionMessage(toX, toY, toDirection)); err != nil {
-							debug(fmt.Sprintf("Error on send command: %v", err))
-						}
+					if err = player.send(player.createPlayerMoveOkMessage()); err != nil {
+						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
 				} else {
 					if err = player.send(player.createInvalidPositionMessage(toX, toY, toDirection)); err != nil {

@@ -183,6 +183,9 @@ func (p *Player) canMove() bool {
 }
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
+	return true
+	
+	/*
 	var idx = toX + toY * maps[p.Map].Layers[0].Width
 	var gid = maps[p.Map].Layers[0].Data[idx]
 
@@ -191,6 +194,7 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	}
 
 	return true
+	*/
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {

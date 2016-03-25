@@ -82,6 +82,14 @@ type PlayerPositionMessage struct {
 	Direction int `json:"direction"`
 }
 
+type PlayerMoveOkMessage struct {
+	Type      string `json:"type"`
+	Id        string `json:"id"`
+	X         int `json:"x"`
+	Y         int `json:"y"`
+	Direction int `json:"direction"`
+}
+
 type PlayerRemoveMessage struct {
 	Type string `json:"type"`
 	Id   string `json:"id"`
@@ -135,6 +143,10 @@ func (p *Player) createSimpleMessage(messageType string) SimpleMessage {
 
 func (p *Player) createPositionMessage(new bool) PlayerPositionMessage {
 	return PlayerPositionMessage{Type: "move", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction}
+}
+
+func (p *Player) createPlayerMoveOkMessage() PlayerMoveOkMessage {
+	return PlayerMoveOkMessage{Type: "move-ok", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction}
 }
 
 func (p *Player) createInvalidPositionMessage() PlayerInvalidPositionMessage {
@@ -269,7 +281,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 						player.Y = toY
 						player.Direction = toDirection
 
-						if err = player.send(player.createSimpleMessage("move-ok")); err != nil {
+						if err = player.send(player.createPlayerMoveOkMessage()); err != nil {
 							debug(fmt.Sprintf("Error on send command: %v", err))
 						}
 					} else {

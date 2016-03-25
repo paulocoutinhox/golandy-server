@@ -184,8 +184,6 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	lastMovementMS := p.LastMovementTime.UnixNano() / int64(time.Millisecond)
 	ms := currentMS - lastMovementMS
 
-	return
-
 	if ms <= int(p.MovementDelay) {
 		return false
 	}

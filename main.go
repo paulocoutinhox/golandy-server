@@ -191,17 +191,14 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	}
 
 	// valida o tile
-	/*
 	var idx = toX + toY * maps[p.Map].Layers[0].Width
 	var gid = maps[p.Map].Layers[0].Data[idx]
 
 	if gid > 0 {
 		return false
 	}
-	*/
 
 	// valida a posição
-	/*
 	if (toX > (p.X + 1)) {
 		return false
 	} else if (toX < (p.X - 1)) {
@@ -211,7 +208,7 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	} else if (toY > (p.Y + 1)) {
 		return false
 	}
-	*/
+
 	return true
 }
 

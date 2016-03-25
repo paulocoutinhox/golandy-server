@@ -15,7 +15,7 @@ import (
 	"io/ioutil"
 )
 
-var appVersion = "1.0.10"
+var appVersion = "1.0.11"
 var validateOrigin = false
 var maps = make(map[string]*Map)
 

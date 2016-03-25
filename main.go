@@ -15,7 +15,7 @@ import (
 	"io/ioutil"
 )
 
-var appVersion = "1.0.9"
+var appVersion = "1.0.10"
 var validateOrigin = false
 var maps = make(map[string]*Map)
 
@@ -271,10 +271,19 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			messageDataType := messageData["type"]
 
-			if messageDataType == "move" {
+			if messageDataType == "ping" {
+				// ++++++++++++++++++++++++++++++++++++++++++
+				// ping - comando para validar o delay no cliente
+				// ++++++++++++++++++++++++++++++++++++++++++
+
+				if err = player.send(player.createSimpleMessage("pong")); err != nil {
+					debug(fmt.Sprintf("Error on send command: %v", err))
+				}
+			} else if messageDataType == "move" {
 				// ++++++++++++++++++++++++++++++++++++++++++
 				// move = posição do personagem
 				// ++++++++++++++++++++++++++++++++++++++++++
+
 				var toX, toY, toDirection int
 
 				if value, ok := messageData["x"]; ok {

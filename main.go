@@ -96,11 +96,14 @@ type PlayerRemoveMessage struct {
 }
 
 type PlayerInvalidPositionMessage struct {
-	Type      string `json:"type"`
-	Id        string `json:"id"`
-	X         int `json:"x"`
-	Y         int `json:"y"`
-	Direction int `json:"direction"`
+	Type        string `json:"type"`
+	Id          string `json:"id"`
+	X           int `json:"x"`
+	Y           int `json:"y"`
+	Direction   int `json:"direction"`
+	toX         int `json:"toX"`
+	toY         int `json:"toY"`
+	toDirection int `json:"toDirection"`
 }
 
 type PlayerDataMessage struct {
@@ -149,8 +152,8 @@ func (p *Player) createPlayerMoveOkMessage() PlayerMoveOkMessage {
 	return PlayerMoveOkMessage{Type: "move-ok", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction}
 }
 
-func (p *Player) createInvalidPositionMessage() PlayerInvalidPositionMessage {
-	return PlayerInvalidPositionMessage{Type: "move-invalid", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction}
+func (p *Player) createInvalidPositionMessage(toX, toY, toDirection int) PlayerInvalidPositionMessage {
+	return PlayerInvalidPositionMessage{Type: "move-invalid", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction, toX: toX, toY: toY, toDirection: toDirection}
 }
 
 func (p *Player) createPlayerDataMessage() PlayerDataMessage {
@@ -297,12 +300,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 							debug(fmt.Sprintf("Error on send command: %v", err))
 						}
 					} else {
-						if err = player.send(player.createInvalidPositionMessage()); err != nil {
+						if err = player.send(player.createInvalidPositionMessage(toX, toY, toDirection)); err != nil {
 							debug(fmt.Sprintf("Error on send command: %v", err))
 						}
 					}
 				} else {
-					if err = player.send(player.createInvalidPositionMessage()); err != nil {
+					if err = player.send(player.createInvalidPositionMessage(toX, toY, toDirection)); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
 				}

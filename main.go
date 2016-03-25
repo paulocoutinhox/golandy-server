@@ -101,9 +101,9 @@ type PlayerInvalidPositionMessage struct {
 	X           int `json:"x"`
 	Y           int `json:"y"`
 	Direction   int `json:"direction"`
-	toX         int `json:"toX"`
-	toY         int `json:"toY"`
-	toDirection int `json:"toDirection"`
+	ToX         int `json:"toX"`
+	ToY         int `json:"toY"`
+	ToDirection int `json:"toDirection"`
 }
 
 type PlayerDataMessage struct {
@@ -153,7 +153,7 @@ func (p *Player) createPlayerMoveOkMessage() PlayerMoveOkMessage {
 }
 
 func (p *Player) createInvalidPositionMessage(toX, toY, toDirection int) PlayerInvalidPositionMessage {
-	return PlayerInvalidPositionMessage{Type: "move-invalid", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction, toX: toX, toY: toY, toDirection: toDirection}
+	return PlayerInvalidPositionMessage{Type: "move-invalid", X: p.X, Y: p.Y, Id: p.Id, Direction: p.Direction, ToX: toX, ToY: toY, ToDirection: toDirection}
 }
 
 func (p *Player) createPlayerDataMessage() PlayerDataMessage {
@@ -183,7 +183,10 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	currentMS := time.Now().UnixNano() / int64(time.Millisecond)
 	lastMovementMS := p.LastMovementTime.UnixNano() / int64(time.Millisecond)
 	ms := currentMS - lastMovementMS
-	return (ms > int64(p.MovementDelay))
+
+	if ms <= int64(p.MovementDelay) {
+		return false
+	}
 
 	// valida o tile
 	var idx = toX + toY * maps[p.Map].Layers[0].Width

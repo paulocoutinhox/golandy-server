@@ -184,17 +184,21 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	lastMovementMS := p.LastMovementTime.UnixNano() / int64(time.Millisecond)
 	ms := currentMS - lastMovementMS
 
-	if ms <= int64(p.MovementDelay) {
+	return
+
+	if ms <= int(p.MovementDelay) {
 		return false
 	}
 
 	// valida o tile
+	/*
 	var idx = toX + toY * maps[p.Map].Layers[0].Width
 	var gid = maps[p.Map].Layers[0].Data[idx]
 
 	if gid > 0 {
 		return false
 	}
+	*/
 
 	// valida a posição
 	if (toX > (p.X + 1)) {

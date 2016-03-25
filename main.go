@@ -201,6 +201,7 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	*/
 
 	// valida a posição
+	/*
 	if (toX > (p.X + 1)) {
 		return false
 	} else if (toX < (p.X - 1)) {
@@ -210,7 +211,7 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	} else if (toY > (p.Y + 1)) {
 		return false
 	}
-
+	*/
 	return true
 }
 

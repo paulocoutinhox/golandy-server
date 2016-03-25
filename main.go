@@ -129,7 +129,7 @@ type Player struct {
 }
 
 func debug(message string) {
-	log.Printf("> %s\n", message);
+	log.Printf("> %s\n", message)
 }
 
 func randomInt(min, max int) int {
@@ -183,10 +183,22 @@ func (p *Player) canMove() bool {
 }
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
+	// valida o tile
 	var idx = toX + toY * maps[p.Map].Layers[0].Width
 	var gid = maps[p.Map].Layers[0].Data[idx]
 
 	if gid > 0 {
+		return false
+	}
+
+	// valida a posição
+	if (toX > (p.X + 1)) {
+		return false
+	} else if (toX < (p.X - 1)) {
+		return false
+	} else if (toY < (p.Y - 1)) {
+		return false
+	} else if (toY > (p.Y + 1)) {
 		return false
 	}
 
@@ -211,11 +223,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	player.CharType = "002"
 	player.Direction = 3
-	player.X = 3;
-	player.Y = 4;
-	player.MovementDelay = float64(randomInt(50, 200));
-	player.LastMovementTime = time.Now();
-	player.Map = "001";
+	player.X = 3
+	player.Y = 4
+	player.MovementDelay = 300 //float64(randomInt(50, 200))
+	player.LastMovementTime = time.Now()
+	player.Map = "001"
 
 	// listen para comandos ou erros
 	for {
@@ -413,7 +425,7 @@ func loadMaps() {
 }
 
 func main() {
-	loadMaps();
+	loadMaps()
 
 	gin.SetMode(gin.ReleaseMode)
 

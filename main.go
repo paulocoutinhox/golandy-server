@@ -15,7 +15,7 @@ import (
 	"io/ioutil"
 )
 
-var appVersion = "1.0.11"
+var appVersion = "1.0.12"
 var validateOrigin = false
 var maps = make(map[string]*Map)
 
@@ -171,7 +171,22 @@ func (p *Player) createRemovePlayerMessage() PlayerRemoveMessage {
 func (p *Player) send(v interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	debug(fmt.Sprintf("Message sent: %v", v))
 	return p.Socket.WriteJSON(v)
+}
+
+func (p *Player) sendToAll(v interface{}) {
+	go func() {
+		for _, player := range Players {
+			if player.Id != p.Id {
+				var err error
+
+				if err = player.send(p.createPositionMessage(false)); err != nil {
+					debug(fmt.Sprintf("Error on send command: %v", err))
+				}
+			}
+		}
+	}()
 }
 
 func (p *Player) updateLastMovementTime() {
@@ -308,6 +323,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					if err = player.send(player.createPlayerMoveOkMessage()); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
+
+					player.sendToAll(player.createPositionMessage(false));
 				} else {
 					if err = player.send(player.createInvalidPositionMessage(toX, toY, toDirection)); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
@@ -396,6 +413,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		/*
 		go func() {
 			for _, p := range Players {
 				if p.Id != player.Id {
@@ -406,6 +424,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 			}
 		}()
+		*/
 	}
 }
 

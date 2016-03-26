@@ -15,7 +15,7 @@ import (
 	"io/ioutil"
 )
 
-var appVersion = "1.0.13"
+var appVersion = "1.0.14"
 var validateOrigin = false
 var maps = make(map[string]*Map)
 
@@ -324,7 +324,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
 
-					player.sendToAll(player.createPositionMessage(false));
+					player.sendToAll(player.createPositionMessage(false))
 				} else {
 					if err = player.send(player.createInvalidPositionMessage(toX, toY, toDirection)); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))

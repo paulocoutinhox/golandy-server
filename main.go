@@ -245,7 +245,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	player.Direction = 3
 	player.X = 3
 	player.Y = 4
-	player.MovementDelay = 200 //float64(randomInt(50, 200))
+	player.MovementDelay = 250 //float64(randomInt(50, 200))
 	player.LastMovementTime = time.Now()
 	player.Map = "001"
 

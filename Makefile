@@ -35,4 +35,4 @@ update:
 	make install
 
 showprocess:
-    ps aux | grep golandy-server
+	ps aux | grep golandy-server

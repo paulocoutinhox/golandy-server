@@ -33,3 +33,6 @@ update:
 	git pull origin master
 	make deps
 	make install
+
+showprocess:
+    ps aux | grep golandy-server

@@ -31,4 +31,5 @@ start:
 
 update:
 	git pull origin master
+	make deps
 	make install

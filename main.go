@@ -2,8 +2,6 @@ package main
 
 import (
 	"github.com/pborman/uuid"
-	"github.com/gorilla/websocket"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"sync"
@@ -13,12 +11,14 @@ import (
 	"math/rand"
 	"os"
 	"io/ioutil"
+	"golang.org/x/net/websocket"
 )
 
 var appVersion = "1.0.14"
 var validateOrigin = false
 var maps = make(map[string]*Map)
 
+/*
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -32,6 +32,7 @@ var wsUpgrader = websocket.Upgrader{
 		return true
 	},
 }
+*/
 
 var Players = make([]*Player, 0)
 
@@ -172,7 +173,7 @@ func (p *Player) send(v interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	debug(fmt.Sprintf("Message sent: %v", v))
-	return p.Socket.WriteJSON(v)
+	return websocket.JSON.Send(p.Socket, v)
 }
 
 func (p *Player) sendToAll(v interface{}) {
@@ -225,21 +226,14 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	return true
 }
 
-func wsHandler(w http.ResponseWriter, r *http.Request) {
+func wsHandler(ws *websocket.Conn) {
 	// faz o upgrade da conexão pra websocket
-	conn, err := wsUpgrader.Upgrade(w, r, nil)
-
-	if err != nil {
-		debug(fmt.Sprintf("Failed to set websocket upgrade: %v", err))
-		return
-	}
-
-	debug(fmt.Sprintf("New connection from: %+v", conn.RemoteAddr()))
+	debug(fmt.Sprintf("New connection from: %+v", ws.RemoteAddr()))
 
 	// cria o novo player
 	player := new(Player)
 	player.Id = uuid.New()
-	player.Socket = conn
+	player.Socket = ws
 
 	player.CharType = "002"
 	player.Direction = 3
@@ -251,7 +245,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// listen para comandos ou erros
 	for {
-		messageType, message, err := conn.ReadMessage()
+		messageRaw := make([]byte, 512)
+		messageLength, err := ws.Read(messageRaw)
+		message := messageRaw[:messageLength]
 
 		if err != nil {
 			debug(fmt.Sprintf("Error on player: %v", err))
@@ -277,7 +273,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		debug(fmt.Sprintf("Message received: %v - %v", messageType, string(message)))
+		debug(fmt.Sprintf("Message received: %v - %v", string(message)))
 
 		var messageData map[string]interface{}
 
@@ -453,16 +449,31 @@ func loadMaps() {
 func main() {
 	loadMaps()
 
+	/*
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
 
 	r.GET("/ws", func(c *gin.Context) {
+		handler := websocket.Handler(wsHandler)
+		handler.ServeHTTP(c.Writer, c.Request)
+
 		wsHandler(c.Writer, c.Request)
 	})
 
 	r.Static("/static", "public")
 
 	r.Run(":3030")
+	*/
+
+	http.Handle("/ws", websocket.Handler(wsHandler))
+	http.Handle("/public", http.FileServer(http.Dir("public")))
+
+	err := http.ListenAndServe(":3030", nil)
+
+	if err != nil {
+		debug("Fatal Error: " + err.Error())
+		os.Exit(1)
+	}
 }

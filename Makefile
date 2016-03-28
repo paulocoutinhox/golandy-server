@@ -19,8 +19,7 @@ test:
 
 deps:
 	${GODEPS} github.com/pborman/uuid
-	${GODEPS} github.com/gin-gonic/gin
-	${GODEPS} github.com/gorilla/websocket
+	${GODEPS} golang.org/x/net/websocket
 
 stop:
 	pkill -f ${EXECUTABLE}

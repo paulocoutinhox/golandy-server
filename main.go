@@ -114,7 +114,7 @@ type PlayerDataMessage struct {
 	Y             int `json:"y"`
 	CharType      string `json:"charType"`
 	Direction     int `json:"direction"`
-	MovementDelay float64 `json:"movementDelay"`
+	MovementDelay int64 `json:"movementDelay"`
 	Map           string `json:"map"`
 }
 
@@ -124,7 +124,7 @@ type Player struct {
 	Y                int
 	CharType         string
 	Direction        int
-	MovementDelay    float64
+	MovementDelay    int64
 	LastMovementTime int64
 	Map              string
 
@@ -191,18 +191,18 @@ func (p *Player) sendToAll(v interface{}) {
 }
 
 func (p *Player) updateLastMovementTime() {
-	//p.LastMovementTime = time.Now()
-	p.LastMovementTime = time.Now().UnixNano() / int64(time.Millisecond)
+	p.LastMovementTime = time.Now().UnixNano()
 }
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	// valida o tempo
-	currentMS := time.Now().UnixNano() / int64(time.Millisecond)
-	lastMovementMS := p.LastMovementTime
-	ms := currentMS - lastMovementMS
+	currentNS := time.Now().UnixNano()
+	lastMovementNS := p.LastMovementTime
+	ns := currentNS - lastMovementNS
+	nsLimit := (p.MovementDelay * int64(time.Nanosecond))
 
-	if ms <= int64(p.MovementDelay) {
-		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentMS, lastMovementMS, ms))
+	if ns <= nsLimit {
+		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentNS, lastMovementNS, ns))
 		return false
 	}
 

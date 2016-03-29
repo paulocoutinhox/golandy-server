@@ -125,7 +125,7 @@ type Player struct {
 	CharType         string
 	Direction        int
 	MovementDelay    float64
-	LastMovementTime time.Time
+	LastMovementTime int64
 	Map              string
 
 	Socket           *websocket.Conn
@@ -191,13 +191,14 @@ func (p *Player) sendToAll(v interface{}) {
 }
 
 func (p *Player) updateLastMovementTime() {
-	p.LastMovementTime = time.Now()
+	//p.LastMovementTime = time.Now()
+	p.LastMovementTime = time.Now().UnixNano() / int64(time.Millisecond)
 }
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	// valida o tempo
 	currentMS := time.Now().UnixNano() / int64(time.Millisecond)
-	lastMovementMS := p.LastMovementTime.UnixNano() / int64(time.Millisecond)
+	lastMovementMS := p.LastMovementTime
 	ms := currentMS - lastMovementMS
 
 	if ms <= int64(p.MovementDelay) {

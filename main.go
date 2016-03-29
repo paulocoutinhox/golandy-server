@@ -247,8 +247,10 @@ func wsHandler(ws *websocket.Conn) {
 	player.X = 3
 	player.Y = 4
 	player.MovementDelay = 200 //float64(randomInt(50, 200))
-	player.LastMovementTime = time.Now()
+	player.LastMovementTime = 0
 	player.Map = "001"
+
+	player.updateLastMovementTime()
 
 	// listen para comandos ou erros
 	for {

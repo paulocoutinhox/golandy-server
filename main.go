@@ -208,6 +208,7 @@ func (p *Player) sendToAll(v interface{}) {
 
 func (p *Player) updateLastMovementTime() {
 	p.LastMovementTime = time.Now().UTC()
+	debug(fmt.Sprintf("Player updated atime move - %v", p.LastMovementTime))
 }
 
 func (p *Player) updateLastPingTime() {
@@ -340,6 +341,7 @@ func wsHandler(ws *websocket.Conn) {
 				if player.canMoveTo(toX, toY, toDirection) {
 					debug(player.LastMovementTime.String())
 					debug(time.Now().UTC().String())
+
 					player.updateLastMovementTime()
 
 					player.X = toX

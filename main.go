@@ -125,7 +125,7 @@ type Player struct {
 	CharType         string
 	Direction        int
 	MovementDelay    int64
-	LastMovementTime int64
+	LastMovementTime time.Time
 	Map              string
 
 	Socket           *websocket.Conn
@@ -191,18 +191,17 @@ func (p *Player) sendToAll(v interface{}) {
 }
 
 func (p *Player) updateLastMovementTime() {
-	p.LastMovementTime = time.Now().UnixNano()
+	p.LastMovementTime = time.Now().UTC()
 }
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	// valida o tempo
-	currentNS := time.Now().UnixNano()
-	lastMovementNS := p.LastMovementTime
-	ns := currentNS - lastMovementNS
-	nsLimit := (p.MovementDelay * int64(time.Nanosecond))
+	currentTime := time.Now().UTC()
+	lastMovementTime := p.LastMovementTime
+	diff := currentTime.Sub(lastMovementTime).Nanoseconds() / int64(time.Millisecond)
 
-	if ns <= nsLimit {
-		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentNS, lastMovementNS, ns))
+	if diff <= p.MovementDelay {
+		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentTime, lastMovementTime, diff))
 		return false
 	}
 
@@ -247,10 +246,8 @@ func wsHandler(ws *websocket.Conn) {
 	player.X = 3
 	player.Y = 4
 	player.MovementDelay = 200 //float64(randomInt(50, 200))
-	player.LastMovementTime = 0
+	player.LastMovementTime = time.Now().UTC()
 	player.Map = "001"
-
-	player.updateLastMovementTime()
 
 	// listen para comandos ou erros
 	for {

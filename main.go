@@ -198,9 +198,9 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	// valida o tempo
 	currentTime := time.Now().UTC()
 	lastMovementTime := p.LastMovementTime
-	diff := currentTime.Sub(lastMovementTime).Nanoseconds() / int64(time.Millisecond)
+	diff := currentTime.Sub(lastMovementTime).Nanoseconds() // / int64(time.Millisecond)
 
-	if diff <= p.MovementDelay {
+	if diff <= 200000000 {
 		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentTime, lastMovementTime, diff))
 		return false
 	}

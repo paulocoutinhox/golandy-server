@@ -338,6 +338,8 @@ func wsHandler(ws *websocket.Conn) {
 				}
 
 				if player.canMoveTo(toX, toY, toDirection) {
+					debug(player.LastMovementTime.String())
+					debug(time.Now().UTC().String())
 					player.updateLastMovementTime()
 
 					player.X = toX

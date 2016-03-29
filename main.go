@@ -8,17 +8,17 @@ import (
 	"fmt"
 	"encoding/json"
 	"time"
-	"math/rand"
 	"os"
 	"io/ioutil"
 	"golang.org/x/net/websocket"
 )
 
 var appVersion = "1.0.14"
-var validateOrigin = false
 var maps = make(map[string]*Map)
 
 /*
+var validateOrigin = false
+
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -75,6 +75,11 @@ type SimpleMessage struct {
 	Type string `json:"type"`
 }
 
+type PongMessage struct {
+	Type string `json:"type"`
+	Time int64 `json:"time"`
+}
+
 type PlayerPositionMessage struct {
 	Type      string `json:"type"`
 	Id        string `json:"id"`
@@ -126,6 +131,7 @@ type Player struct {
 	Direction        int
 	MovementDelay    int64
 	LastMovementTime time.Time
+	LastPingTime     time.Time
 	Map              string
 
 	Socket           *websocket.Conn
@@ -136,10 +142,12 @@ func debug(message string) {
 	log.Printf("> %s\n", message)
 }
 
+/*
 func randomInt(min, max int) int {
 	rand.Seed(time.Now().Unix())
 	return rand.Intn(max - min) + min
 }
+*/
 
 func (p *Player) createSimpleMessage(messageType string) SimpleMessage {
 	return SimpleMessage{Type: messageType}
@@ -169,6 +177,14 @@ func (p *Player) createRemovePlayerMessage() PlayerRemoveMessage {
 	return PlayerRemoveMessage{Type: "player-remove", Id: p.Id}
 }
 
+func (p *Player) createPongMessage() PongMessage {
+	currentTime := time.Now().UTC()
+	lastPingTime := p.LastPingTime
+	diff := currentTime.Sub(lastPingTime).Nanoseconds() / int64(time.Millisecond)
+	
+	return PongMessage{Type: "pong", Time: diff}
+}
+
 func (p *Player) send(v interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -194,13 +210,17 @@ func (p *Player) updateLastMovementTime() {
 	p.LastMovementTime = time.Now().UTC()
 }
 
+func (p *Player) updateLastPingTime() {
+	p.LastPingTime = time.Now().UTC()
+}
+
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	// valida o tempo
 	currentTime := time.Now().UTC()
 	lastMovementTime := p.LastMovementTime
-	diff := currentTime.Sub(lastMovementTime).Nanoseconds() // / int64(time.Millisecond)
+	diff := currentTime.Sub(lastMovementTime).Nanoseconds() / int64(time.Millisecond)
 
-	if diff <= 200000000 {
+	if diff <= p.MovementDelay {
 		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentTime, lastMovementTime, diff))
 		return false
 	}
@@ -247,6 +267,7 @@ func wsHandler(ws *websocket.Conn) {
 	player.Y = 4
 	player.MovementDelay = 200 //float64(randomInt(50, 200))
 	player.LastMovementTime = time.Now().UTC()
+	player.LastPingTime = time.Now().UTC()
 	player.Map = "001"
 
 	// listen para comandos ou erros
@@ -292,8 +313,9 @@ func wsHandler(ws *websocket.Conn) {
 				// ++++++++++++++++++++++++++++++++++++++++++
 				// ping - comando para validar o delay no cliente
 				// ++++++++++++++++++++++++++++++++++++++++++
+				player.updateLastPingTime()
 
-				if err = player.send(player.createSimpleMessage("pong")); err != nil {
+				if err = player.send(player.createPongMessage()); err != nil {
 					debug(fmt.Sprintf("Error on send command: %v", err))
 				}
 			} else if messageDataType == "move" {

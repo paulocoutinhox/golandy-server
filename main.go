@@ -220,7 +220,7 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	lastMovementTime := p.LastMovementTime
 	diff := currentTime.Sub(lastMovementTime).Nanoseconds() / int64(time.Millisecond)
 
-	if diff <= (p.MovementDelay - 50) {
+	if diff <= p.MovementDelay {
 		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentTime, lastMovementTime, diff))
 		return false
 	}

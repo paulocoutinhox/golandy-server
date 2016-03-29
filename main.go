@@ -201,6 +201,7 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	ms := currentMS - lastMovementMS
 
 	if ms <= int64(p.MovementDelay) {
+		debug("Player cannot move (movement delay)")
 		return false
 	}
 
@@ -209,17 +210,22 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	var gid = maps[p.Map].Layers[0].Data[idx]
 
 	if gid > 0 {
+		debug("Player cannot move (map block)")
 		return false
 	}
 
 	// valida a posição
 	if (toX > (p.X + 1)) {
+		debug("Player cannot move (invalid position - too far)")
 		return false
 	} else if (toX < (p.X - 1)) {
+		debug("Player cannot move (invalid position - too far)")
 		return false
 	} else if (toY < (p.Y - 1)) {
+		debug("Player cannot move (invalid position - too far)")
 		return false
 	} else if (toY > (p.Y + 1)) {
+		debug("Player cannot move (invalid position - too far)")
 		return false
 	}
 
@@ -273,7 +279,7 @@ func wsHandler(ws *websocket.Conn) {
 			break
 		}
 
-		debug(fmt.Sprintf("Message received: %v - %v", string(message)))
+		debug(fmt.Sprintf("Message received: %v - %v", string(message), messageLength))
 
 		var messageData map[string]interface{}
 

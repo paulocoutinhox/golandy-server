@@ -181,7 +181,7 @@ func (p *Player) createPongMessage() PongMessage {
 	currentTime := time.Now().UTC()
 	lastPingTime := p.LastPingTime
 	diff := currentTime.Sub(lastPingTime).Nanoseconds() / int64(time.Millisecond)
-	
+
 	return PongMessage{Type: "pong", Time: diff}
 }
 
@@ -313,11 +313,11 @@ func wsHandler(ws *websocket.Conn) {
 				// ++++++++++++++++++++++++++++++++++++++++++
 				// ping - comando para validar o delay no cliente
 				// ++++++++++++++++++++++++++++++++++++++++++
-				player.updateLastPingTime()
-
 				if err = player.send(player.createPongMessage()); err != nil {
 					debug(fmt.Sprintf("Error on send command: %v", err))
 				}
+
+				player.updateLastPingTime()
 			} else if messageDataType == "move" {
 				// ++++++++++++++++++++++++++++++++++++++++++
 				// move = posição do personagem

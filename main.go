@@ -201,7 +201,7 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	ms := currentMS - lastMovementMS
 
 	if ms <= int64(p.MovementDelay) {
-		debug("Player cannot move (movement delay) - %v, %v, %v", currentMS, lastMovementMS, ms)
+		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentMS, lastMovementMS, ms))
 		return false
 	}
 

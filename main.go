@@ -122,9 +122,10 @@ type PlayerDataMessage struct {
 	Direction     int `json:"direction"`
 	MovementDelay int64 `json:"movementDelay"`
 	Map           string `json:"map"`
+	AddBombDelay  int64 `json:"addBombDelay"`
 }
 
-type NewBombMessage struct {
+type BombAddedMessage struct {
 	Type          string `json:"type"`
 	Id            string `json:"id"`
 	X             int `json:"x"`
@@ -137,6 +138,14 @@ type NewBombMessage struct {
 	Player        string `json:"player"`
 }
 
+type BombAddInvalidMessage struct {
+	Type string `json:"type"`
+	X    int `json:"x"`
+	Y    int `json:"y"`
+	ToX  int `json:"toX"`
+	ToY  int `json:"toY"`
+}
+
 type Player struct {
 	Id               string
 	X                int
@@ -147,6 +156,8 @@ type Player struct {
 	LastMovementTime time.Time
 	LastPingTime     time.Time
 	Map              string
+	LastAddBombTime  time.Time
+	AddBombDelay     int64
 
 	Socket           *websocket.Conn
 	mu               sync.Mutex
@@ -216,14 +227,18 @@ func (p *Player) createPongMessage() PongMessage {
 	return PongMessage{Type: "pong", Time: diff}
 }
 
-func (p *Player) createNewBombMessage(bomb *Bomb) NewBombMessage {
+func (p *Player) createBombAddedMessage(bomb *Bomb) BombAddedMessage {
 	playerID := ""
 
 	if bomb.Player != nil {
 		playerID = bomb.Player.Id
 	}
 
-	return NewBombMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: getMillisecondsFromTime(bomb.CreatedAt), FireDelay: bomb.FireDelay, Player: playerID}
+	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: getMillisecondsFromTime(bomb.CreatedAt), FireDelay: bomb.FireDelay, Player: playerID}
+}
+
+func (p *Player) createBombAddInvalidMessage(bombX, bombY int) BombAddInvalidMessage {
+	return BombAddInvalidMessage{Type: "bomb-add-invalid", X: p.X, Y: p.Y, ToX: bombX, ToY: bombY}
 }
 
 func (p *Player) send(v interface{}) error {
@@ -293,6 +308,38 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	return true
 }
 
+func (p *Player) canAddBombTo(toX, toY int) bool {
+	// valida o tempo
+	currentTime := time.Now().UTC()
+	lastAddBombTime := p.LastAddBombTime
+	diff := currentTime.Sub(lastAddBombTime).Nanoseconds() / int64(time.Millisecond)
+
+	if diff <= p.AddBombDelay {
+		debug(fmt.Sprintf("Player cannot add bomb (add bomb delay) - %v, %v, %v", currentTime, lastAddBombTime, diff))
+		return false
+	}
+
+	// valida o tile
+	var idx = toX + toY * maps[p.Map].Layers[0].Width
+	var gid = maps[p.Map].Layers[0].Data[idx]
+
+	if gid > 0 {
+		debug("Player cannot add bomb (map block)")
+		return false
+	}
+
+	// valida a posição
+	if (toX != p.X) {
+		debug("Player cannot add bomb (invalid position - different from player)")
+		return false
+	} else if (toY != p.Y) {
+		debug("Player cannot add bomb (invalid position - different from player)")
+		return false
+	}
+
+	return true
+}
+
 func wsHandler(ws *websocket.Conn) {
 	// faz o upgrade da conexão pra websocket
 	debug(fmt.Sprintf("New connection from: %+v", ws.RemoteAddr()))
@@ -310,6 +357,8 @@ func wsHandler(ws *websocket.Conn) {
 	player.LastMovementTime = time.Now().UTC()
 	player.LastPingTime = time.Now().UTC()
 	player.Map = "001"
+	player.LastAddBombTime = time.Now().UTC()
+	player.AddBombDelay = 10000
 
 	// listen para comandos ou erros
 	for {
@@ -494,30 +543,38 @@ func wsHandler(ws *websocket.Conn) {
 					bombY = int(value.(float64))
 				}
 
-				bomb := &Bomb{
-					Id: uuid.New(),
-					X: bombX,
-					Y: bombY,
-					BombType: "001",
-					Direction: 1,
-					MovementDelay: 0,
-					LastMovementTime: time.Now().UTC(),
-					CreatedAt: time.Now().UTC(),
-					FireDelay: 5000,
-					Player: player,
-				}
+				if (player.canAddBombTo(bombX, bombY)) {
+					player.LastAddBombTime = time.Now().UTC()
 
-				Bombs = append(Bombs, bomb)
-
-				go func() {
-					for _, p := range Players {
-						if err = p.send(player.createNewBombMessage(bomb)); err != nil {
-							debug(fmt.Sprintf("Error on send command: %v", err))
-						}
+					bomb := &Bomb{
+						Id: uuid.New(),
+						X: bombX,
+						Y: bombY,
+						BombType: "001",
+						Direction: 1,
+						MovementDelay: 0,
+						LastMovementTime: time.Now().UTC(),
+						CreatedAt: time.Now().UTC(),
+						FireDelay: 5000,
+						Player: player,
 					}
-				}()
 
-				debug("Added and published")
+					Bombs = append(Bombs, bomb)
+
+					go func() {
+						for _, p := range Players {
+							if err = p.send(player.createBombAddedMessage(bomb)); err != nil {
+								debug(fmt.Sprintf("Error on send command: %v", err))
+							}
+						}
+					}()
+
+					debug("Added and published")
+				} else {
+					if err = player.send(player.createBombAddInvalidMessage(bombX, bombY)); err != nil {
+						debug(fmt.Sprintf("Error on send command: %v", err))
+					}
+				}
 			}
 		}
 

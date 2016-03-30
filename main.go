@@ -13,7 +13,7 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-var appVersion = "1.0.14"
+var appVersion = "1.0.15"
 var maps = make(map[string]*Map)
 
 /*
@@ -35,6 +35,7 @@ var wsUpgrader = websocket.Upgrader{
 */
 
 var Players = make([]*Player, 0)
+var Bombs = make([]*Bomb, 0)
 
 type Map struct {
 	Height       int `json:"height"`
@@ -123,6 +124,19 @@ type PlayerDataMessage struct {
 	Map           string `json:"map"`
 }
 
+type NewBombMessage struct {
+	Type          string `json:"type"`
+	Id            string `json:"id"`
+	X             int `json:"x"`
+	Y             int `json:"y"`
+	BombType      string `json:"bombType"`
+	Direction     int `json:"direction"`
+	MovementDelay int64 `json:"movementDelay"`
+	CreatedAt     int64 `json:"createdAt"`
+	FireDelay     int64 `json:"fireDelay"`
+	Player        string `json:"player"`
+}
+
 type Player struct {
 	Id               string
 	X                int
@@ -138,8 +152,25 @@ type Player struct {
 	mu               sync.Mutex
 }
 
+type Bomb struct {
+	Id               string
+	X                int
+	Y                int
+	BombType         string
+	Direction        int
+	MovementDelay    int64
+	LastMovementTime time.Time
+	CreatedAt        time.Time
+	FireDelay        int64
+	Player           *Player
+}
+
 func debug(message string) {
 	log.Printf("> %s\n", message)
+}
+
+func getMillisecondsFromTime(fullTime time.Time) int64 {
+	return int64(fullTime.Nanosecond() / int(time.Millisecond))
 }
 
 /*
@@ -183,6 +214,16 @@ func (p *Player) createPongMessage() PongMessage {
 	diff := currentTime.Sub(lastPingTime).Nanoseconds() / int64(time.Millisecond)
 
 	return PongMessage{Type: "pong", Time: diff}
+}
+
+func (p *Player) createNewBombMessage(bomb *Bomb) NewBombMessage {
+	playerID := ""
+
+	if bomb.Player != nil {
+		playerID = bomb.Player.Id
+	}
+
+	return NewBombMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: getMillisecondsFromTime(bomb.CreatedAt), FireDelay: bomb.FireDelay, Player: playerID}
 }
 
 func (p *Player) send(v interface{}) error {
@@ -437,6 +478,46 @@ func wsHandler(ws *websocket.Conn) {
 				}()
 
 				debug("Published")
+			} else if messageDataType == "bomb-add" {
+				// ++++++++++++++++++++++++++++++++++++++++++
+				// bomb-add = adiciona uma nova bomba
+				// ++++++++++++++++++++++++++++++++++++++++++
+				debug("Adding new bomb...")
+
+				var bombX, bombY int
+
+				if value, ok := messageData["x"]; ok {
+					bombX = int(value.(float64))
+				}
+
+				if value, ok := messageData["y"]; ok {
+					bombY = int(value.(float64))
+				}
+
+				bomb := &Bomb{
+					Id: uuid.New(),
+					X: bombX,
+					Y: bombY,
+					BombType: "001",
+					Direction: 1,
+					MovementDelay: 0,
+					LastMovementTime: time.Now().UTC(),
+					CreatedAt: time.Now().UTC(),
+					FireDelay: 5000,
+					Player: player,
+				}
+
+				Bombs = append(Bombs, bomb)
+
+				go func() {
+					for _, p := range Players {
+						if err = p.send(player.createNewBombMessage(bomb)); err != nil {
+							debug(fmt.Sprintf("Error on send command: %v", err))
+						}
+					}
+				}()
+
+				debug("Added and published")
 			}
 		}
 

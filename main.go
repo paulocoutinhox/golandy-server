@@ -15,6 +15,7 @@ import (
 
 var appVersion = "1.0.15"
 var maps = make(map[string]*Map)
+var tickerBombs = time.NewTicker(time.Millisecond * 500)
 
 /*
 var validateOrigin = false
@@ -146,6 +147,17 @@ type BombAddInvalidMessage struct {
 	ToY  int `json:"toY"`
 }
 
+type BombFiredMessage struct {
+	Type       string `json:"type"`
+	Id         string `json:"id"`
+	X          int `json:"x"`
+	Y          int `json:"y"`
+	BombType   string `json:"bombType"`
+	Direction  int `json:"direction"`
+	FireLength int `json:"fireLength"`
+	Player     string `json:"player"`
+}
+
 type Player struct {
 	Id               string
 	X                int
@@ -172,6 +184,7 @@ type Bomb struct {
 	MovementDelay    int64
 	LastMovementTime time.Time
 	CreatedAt        time.Time
+	FireLength       int
 	FireDelay        int64
 	Player           *Player
 }
@@ -235,6 +248,16 @@ func (p *Player) createBombAddedMessage(bomb *Bomb) BombAddedMessage {
 	}
 
 	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: getMillisecondsFromTime(bomb.CreatedAt), FireDelay: bomb.FireDelay, Player: playerID}
+}
+
+func (p *Player) createBombFiredMessage(bomb *Bomb) BombFiredMessage {
+	playerID := ""
+
+	if bomb.Player != nil {
+		playerID = bomb.Player.Id
+	}
+
+	return BombFiredMessage{Type: "bomb-fired", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, FireLength: bomb.FireLength, Player: playerID}
 }
 
 func (p *Player) createBombAddInvalidMessage(bombX, bombY int) BombAddInvalidMessage {
@@ -358,7 +381,7 @@ func wsHandler(ws *websocket.Conn) {
 	player.LastPingTime = time.Now().UTC()
 	player.Map = "001"
 	player.LastAddBombTime = time.Now().UTC()
-	player.AddBombDelay = 10000
+	player.AddBombDelay = 1000
 
 	// listen para comandos ou erros
 	for {
@@ -556,6 +579,7 @@ func wsHandler(ws *websocket.Conn) {
 						LastMovementTime: time.Now().UTC(),
 						CreatedAt: time.Now().UTC(),
 						FireDelay: 5000,
+						FireLength: 3,
 						Player: player,
 					}
 
@@ -635,6 +659,30 @@ func main() {
 
 	r.Run(":3030")
 	*/
+
+	go func() {
+		for range tickerBombs.C {
+			for i, bomb := range Bombs {
+				currentTime := time.Now().UTC()
+				bombCreatedAt := bomb.CreatedAt
+				diff := currentTime.Sub(bombCreatedAt).Nanoseconds() / int64(time.Millisecond)
+
+				if diff > bomb.FireDelay {
+					Bombs = append(Bombs[:i], Bombs[i + 1:]...)
+
+					go func() {
+						for _, p := range Players {
+							var err error
+
+							if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
+								debug(fmt.Sprintf("Error on send command: %v", err))
+							}
+						}
+					}()
+				}
+			}
+		}
+	}()
 
 	http.Handle("/ws", websocket.Handler(wsHandler))
 	http.Handle("/public", http.FileServer(http.Dir("public")))

@@ -16,6 +16,8 @@ import (
 var appVersion = "1.0.15"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
+var playersMU sync.Mutex
+var bombsMU sync.Mutex
 
 /*
 var validateOrigin = false
@@ -197,6 +199,42 @@ func getMillisecondsFromTime(fullTime time.Time) int64 {
 	return int64(fullTime.Nanosecond() / int(time.Millisecond))
 }
 
+func removePlayer(player *Player) {
+	playersMU.Lock()
+	defer playersMU.Unlock()
+
+	for i, p := range Players {
+		if p.Id == player.Id {
+			Players = append(Players[:i], Players[i + 1:]...)
+		}
+	}
+}
+
+func addPlayer(player *Player) {
+	playersMU.Lock()
+	defer playersMU.Unlock()
+
+	Players = append(Players, player)
+}
+
+func removeBomb(bomb *Bomb) {
+	bombsMU.Lock()
+	defer bombsMU.Unlock()
+
+	for i, b := range Bombs {
+		if b.Id == bomb.Id {
+			Bombs = append(Bombs[:i], Bombs[i + 1:]...)
+		}
+	}
+}
+
+func addBomb(bomb *Bomb) {
+	bombsMU.Lock()
+	defer bombsMU.Unlock()
+
+	Bombs = append(Bombs, bomb)
+}
+
 /*
 func randomInt(min, max int) int {
 	rand.Seed(time.Now().Unix())
@@ -267,6 +305,7 @@ func (p *Player) createBombAddInvalidMessage(bombX, bombY int) BombAddInvalidMes
 func (p *Player) send(v interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	debug(fmt.Sprintf("Message sent: %v", v))
 	return websocket.JSON.Send(p.Socket, v)
 }
@@ -396,9 +435,9 @@ func wsHandler(ws *websocket.Conn) {
 			// erro no socket e foi desconectado - envia essa informação para todos
 			// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-			for i, p := range Players {
+			for _, p := range Players {
 				if p.Id == player.Id {
-					Players = append(Players[:i], Players[i + 1:]...)
+					removePlayer(p)
 				} else {
 					debug(fmt.Sprintf("Destroy player: %v", player))
 
@@ -505,7 +544,7 @@ func wsHandler(ws *websocket.Conn) {
 					// cria o novo player
 					debug(fmt.Sprintf("New player logged: %v - %v", username, password))
 
-					Players = append(Players, player)
+					addPlayer(player)
 					debug(fmt.Sprintf("New player: %v", player))
 
 					if err = player.send(player.createSimpleMessage("login-ok")); err != nil {
@@ -583,7 +622,7 @@ func wsHandler(ws *websocket.Conn) {
 						Player: player,
 					}
 
-					Bombs = append(Bombs, bomb)
+					addBomb(bomb)
 
 					go func() {
 						for _, p := range Players {
@@ -662,13 +701,13 @@ func main() {
 
 	go func() {
 		for range tickerBombs.C {
-			for i, bomb := range Bombs {
+			for _, bomb := range Bombs {
 				currentTime := time.Now().UTC()
 				bombCreatedAt := bomb.CreatedAt
 				diff := currentTime.Sub(bombCreatedAt).Nanoseconds() / int64(time.Millisecond)
 
 				if diff > bomb.FireDelay {
-					Bombs = append(Bombs[:i], Bombs[i + 1:]...)
+					removeBomb(bomb)
 
 					go func() {
 						for _, p := range Players {

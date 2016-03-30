@@ -191,6 +191,11 @@ type Bomb struct {
 	Player           *Player
 }
 
+type Point struct {
+	X int
+	Y int
+}
+
 func debug(message string) {
 	log.Printf("> %s\n", message)
 }
@@ -233,6 +238,30 @@ func addBomb(bomb *Bomb) {
 	defer bombsMU.Unlock()
 
 	Bombs = append(Bombs, bomb)
+}
+
+func isTileBlocking(mapType string, x, y int) bool {
+	bombsMU.Lock()
+	defer bombsMU.Unlock()
+
+	var idx = x + y * maps[mapType].Layers[0].Width
+	var gid = maps[mapType].Layers[0].Data[idx]
+
+	if gid > 0 {
+		return true
+	}
+
+	return false
+}
+
+func inPointList(desiredX, desiredY int, list []*Point) bool {
+	for _, point := range list {
+		if point.X == desiredX && point.Y == desiredY {
+			return true
+		}
+	}
+
+	return false
 }
 
 /*
@@ -344,10 +373,9 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	}
 
 	// valida o tile
-	var idx = toX + toY * maps[p.Map].Layers[0].Width
-	var gid = maps[p.Map].Layers[0].Data[idx]
+	var tileBlocking = isTileBlocking(p.Map, toX, toY)
 
-	if gid > 0 {
+	if tileBlocking {
 		debug("Player cannot move (map block)")
 		return false
 	}
@@ -709,15 +737,29 @@ func main() {
 				if diff > bomb.FireDelay {
 					removeBomb(bomb)
 
-					go func() {
-						for _, p := range Players {
+					var explosionPointList = make([]*Point, 0)
+					explosionPointList = append(explosionPointList, &Point{X: bomb.X, Y: bomb.Y})
+
+					for x := 0; x < bomb.FireLength; x++ {
+						explosionPointList = append(explosionPointList, &Point{X: bomb.X + (x + 1), Y: bomb.Y})
+						explosionPointList = append(explosionPointList, &Point{X: bomb.X - (x + 1), Y: bomb.Y})
+						explosionPointList = append(explosionPointList, &Point{X: bomb.X, Y: bomb.Y + (x + 1)})
+						explosionPointList = append(explosionPointList, &Point{X: bomb.X, Y: bomb.Y - (x + 1)})
+					}
+
+					for _, p := range Players {
+						collidedWithPlayer := inPointList(p.X, p.Y, explosionPointList)
+
+						if collidedWithPlayer {
+							p.Socket.Close()
+						} else {
 							var err error
 
 							if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
 								debug(fmt.Sprintf("Error on send command: %v", err))
 							}
 						}
-					}()
+					}
 				}
 			}
 		}

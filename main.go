@@ -14,7 +14,7 @@ import (
 	"math/rand"
 )
 
-var appVersion = "1.0.16"
+var appVersion = "1.0.17"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex
@@ -101,7 +101,7 @@ type PlayerMoveOkMessage struct {
 	Direction int `json:"direction"`
 }
 
-type PlayerRemoveMessage struct {
+type PlayerRemovedMessage struct {
 	Type string `json:"type"`
 	Id   string `json:"id"`
 }
@@ -300,8 +300,8 @@ func (p *Player) createPlayerDeadMessage() PlayerDataMessage {
 	return PlayerDataMessage{Type: "player-dead", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay, Map: p.Map}
 }
 
-func (p *Player) createRemovePlayerMessage() PlayerRemoveMessage {
-	return PlayerRemoveMessage{Type: "player-remove", Id: p.Id}
+func (p *Player) createPlayerRemovedMessage() PlayerRemovedMessage {
+	return PlayerRemovedMessage{Type: "player-removed", Id: p.Id}
 }
 
 func (p *Player) createPongMessage() PongMessage {
@@ -350,7 +350,7 @@ func (p *Player) sendToAll(v interface{}) {
 			if player.Id != p.Id {
 				var err error
 
-				if err = player.send(p.createPositionMessage(false)); err != nil {
+				if err = player.send(v); err != nil {
 					debug(fmt.Sprintf("Error on send command: %v", err))
 				}
 			}
@@ -475,7 +475,7 @@ func wsHandler(ws *websocket.Conn) {
 				} else {
 					debug(fmt.Sprintf("Destroy player: %v", player))
 
-					if err = p.send(player.createRemovePlayerMessage()); err != nil {
+					if err = p.send(player.createPlayerRemovedMessage()); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
 				}

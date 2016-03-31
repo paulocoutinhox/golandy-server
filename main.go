@@ -14,7 +14,7 @@ import (
 	"math/rand"
 )
 
-var appVersion = "1.0.19"
+var appVersion = "1.0.20"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex

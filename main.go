@@ -11,6 +11,7 @@ import (
 	"os"
 	"io/ioutil"
 	"golang.org/x/net/websocket"
+	"math/rand"
 )
 
 var appVersion = "1.0.15"
@@ -138,6 +139,7 @@ type BombAddedMessage struct {
 	MovementDelay int64 `json:"movementDelay"`
 	CreatedAt     int64 `json:"createdAt"`
 	FireDelay     int64 `json:"fireDelay"`
+	FireLength    int `json:"fireLength"`
 	Player        string `json:"player"`
 }
 
@@ -172,6 +174,7 @@ type Player struct {
 	Map              string
 	LastAddBombTime  time.Time
 	AddBombDelay     int64
+	Online           bool
 
 	Socket           *websocket.Conn
 	mu               sync.Mutex
@@ -264,12 +267,10 @@ func inPointList(desiredX, desiredY int, list []*Point) bool {
 	return false
 }
 
-/*
 func randomInt(min, max int) int {
 	rand.Seed(time.Now().Unix())
 	return rand.Intn(max - min) + min
 }
-*/
 
 func (p *Player) createSimpleMessage(messageType string) SimpleMessage {
 	return SimpleMessage{Type: messageType}
@@ -291,8 +292,12 @@ func (p *Player) createPlayerDataMessage() PlayerDataMessage {
 	return PlayerDataMessage{Type: "player-data", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay, Map: p.Map}
 }
 
-func (p *Player) createNewPlayerMessage() PlayerDataMessage {
-	return PlayerDataMessage{Type: "player-new", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay, Map: p.Map}
+func (p *Player) createPlayerAddedMessage() PlayerDataMessage {
+	return PlayerDataMessage{Type: "player-added", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay, Map: p.Map}
+}
+
+func (p *Player) createPlayerDeadMessage() PlayerDataMessage {
+	return PlayerDataMessage{Type: "player-dead", X: p.X, Y: p.Y, Id: p.Id, CharType: p.CharType, Direction: p.Direction, MovementDelay: p.MovementDelay, Map: p.Map}
 }
 
 func (p *Player) createRemovePlayerMessage() PlayerRemoveMessage {
@@ -314,7 +319,7 @@ func (p *Player) createBombAddedMessage(bomb *Bomb) BombAddedMessage {
 		playerID = bomb.Player.Id
 	}
 
-	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: getMillisecondsFromTime(bomb.CreatedAt), FireDelay: bomb.FireDelay, Player: playerID}
+	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: getMillisecondsFromTime(bomb.CreatedAt), FireDelay: bomb.FireDelay, FireLength: bomb.FireLength, Player: playerID}
 }
 
 func (p *Player) createBombFiredMessage(bomb *Bomb) BombFiredMessage {
@@ -439,16 +444,17 @@ func wsHandler(ws *websocket.Conn) {
 	player.Id = uuid.New()
 	player.Socket = ws
 
+	player.Map = "001"
 	player.CharType = "002"
 	player.Direction = 3
-	player.X = 3
-	player.Y = 4
 	player.MovementDelay = 200 //float64(randomInt(50, 200))
 	player.LastMovementTime = time.Now().UTC()
 	player.LastPingTime = time.Now().UTC()
-	player.Map = "001"
 	player.LastAddBombTime = time.Now().UTC()
 	player.AddBombDelay = 1000
+	player.Online = false
+	player.X = 0
+	player.Y = 0
 
 	// listen para comandos ou erros
 	for {
@@ -593,6 +599,23 @@ func wsHandler(ws *websocket.Conn) {
 				// ++++++++++++++++++++++++++++++++++++++++++
 				debug("Sending player data...")
 
+				player.Online = true
+
+				var tileBlocking = true
+				var playerPosX = 0
+				var playerPosY = 0
+
+				for tileBlocking {
+					playerPosX = randomInt(0, maps[player.Map].Layers[0].Width - 1)
+					playerPosY = randomInt(0, maps[player.Map].Layers[0].Height - 1)
+					tileBlocking = isTileBlocking(player.Map, playerPosX, playerPosY)
+
+					if !tileBlocking {
+						player.X = playerPosX
+						player.Y = playerPosY
+					}
+				}
+
 				if err = player.send(player.createPlayerDataMessage()); err != nil {
 					debug(fmt.Sprintf("Error on send command: %v", err))
 				}
@@ -605,11 +628,11 @@ func wsHandler(ws *websocket.Conn) {
 				go func() {
 					for _, p := range Players {
 						if p.Id != player.Id {
-							if err = player.send(p.createNewPlayerMessage()); err != nil {
+							if err = player.send(p.createPlayerAddedMessage()); err != nil {
 								debug(fmt.Sprintf("Error on send command: %v", err))
 							}
 
-							if err = p.send(player.createNewPlayerMessage()); err != nil {
+							if err = p.send(player.createPlayerAddedMessage()); err != nil {
 								debug(fmt.Sprintf("Error on send command: %v", err))
 							}
 						}
@@ -645,7 +668,7 @@ func wsHandler(ws *websocket.Conn) {
 						MovementDelay: 0,
 						LastMovementTime: time.Now().UTC(),
 						CreatedAt: time.Now().UTC(),
-						FireDelay: 5000,
+						FireDelay: 2000,
 						FireLength: 3,
 						Player: player,
 					}
@@ -728,6 +751,10 @@ func main() {
 	*/
 
 	go func() {
+		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		// essa rotina observa as bombas e mata os players e blocos
+		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 		for range tickerBombs.C {
 			for _, bomb := range Bombs {
 				currentTime := time.Now().UTC()
@@ -749,12 +776,21 @@ func main() {
 
 					for _, p := range Players {
 						collidedWithPlayer := inPointList(p.X, p.Y, explosionPointList)
+						var err error
 
 						if collidedWithPlayer {
-							p.Socket.Close()
-						} else {
-							var err error
+							p.Online = false
 
+							if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
+								debug(fmt.Sprintf("Error on send command: %v", err))
+							}
+
+							if err = p.send(p.createSimpleMessage("dead")); err != nil {
+								debug(fmt.Sprintf("Error on send command: %v", err))
+							}
+
+							p.sendToAll(p.createPlayerDeadMessage());
+						} else {
 							if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
 								debug(fmt.Sprintf("Error on send command: %v", err))
 							}

@@ -14,7 +14,7 @@ import (
 	"math/rand"
 )
 
-var appVersion = "1.0.21"
+var appVersion = "1.0.22"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex
@@ -424,11 +424,17 @@ func (p *Player) canAddBombTo(toX, toY int) bool {
 	}
 
 	// valida a posição
-	if (toX != p.X) {
-		debug("Player cannot add bomb (invalid position - different from player)")
+	if (toX > (p.X + 1)) {
+		debug("Player cannot add bomb (invalid position - too far)")
 		return false
-	} else if (toY != p.Y) {
-		debug("Player cannot add bomb (invalid position - different from player)")
+	} else if (toX < (p.X - 1)) {
+		debug("Player cannot add bomb (invalid position - too far)")
+		return false
+	} else if (toY < (p.Y - 1)) {
+		debug("Player cannot add bomb (invalid position - too far)")
+		return false
+	} else if (toY > (p.Y + 1)) {
+		debug("Player cannot add bomb (invalid position - too far)")
 		return false
 	}
 

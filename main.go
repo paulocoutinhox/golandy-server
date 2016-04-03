@@ -203,10 +203,6 @@ func debug(message string) {
 	log.Printf("> %s\n", message)
 }
 
-func getMillisecondsFromTime(fullTime time.Time) int64 {
-	return int64(fullTime.Nanosecond() / int(time.Millisecond))
-}
-
 func removePlayer(player *Player) {
 	playersMU.Lock()
 	defer playersMU.Unlock()
@@ -305,9 +301,9 @@ func (p *Player) createPlayerRemovedMessage() PlayerRemovedMessage {
 }
 
 func (p *Player) createPongMessage() PongMessage {
-	currentTime := time.Now().UTC()
-	lastPingTime := p.LastPingTime
-	diff := currentTime.Sub(lastPingTime).Nanoseconds() / int64(time.Millisecond)
+	currentTime := time.Now().UTC().Unix()
+	lastPingTime := p.LastPingTime.Unix()
+	diff := currentTime / lastPingTime
 
 	return PongMessage{Type: "pong", Time: diff}
 }
@@ -368,9 +364,9 @@ func (p *Player) updateLastPingTime() {
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	// valida o tempo
-	currentTime := time.Now().UTC()
-	lastMovementTime := p.LastMovementTime
-	diff := currentTime.Sub(lastMovementTime).Nanoseconds() / int64(time.Millisecond)
+	currentTime := time.Now().UTC().Unix()
+	lastMovementTime := p.LastMovementTime.Unix()
+	diff := currentTime - lastMovementTime
 
 	if diff <= p.MovementDelay {
 		debug(fmt.Sprintf("Player cannot move (movement delay) - %v, %v, %v", currentTime, lastMovementTime, diff))
@@ -405,9 +401,9 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 
 func (p *Player) canAddBombTo(toX, toY int) bool {
 	// valida o tempo
-	currentTime := time.Now().UTC()
-	lastAddBombTime := p.LastAddBombTime
-	diff := currentTime.Sub(lastAddBombTime).Nanoseconds() / int64(time.Millisecond)
+	currentTime := time.Now().UTC().Unix()
+	lastAddBombTime := p.LastAddBombTime.Unix()
+	diff := currentTime - lastAddBombTime
 
 	if diff <= p.AddBombDelay {
 		debug(fmt.Sprintf("Player cannot add bomb (add bomb delay) - %v, %v, %v", currentTime, lastAddBombTime, diff))
@@ -763,9 +759,9 @@ func main() {
 
 		for range tickerBombs.C {
 			for _, bomb := range Bombs {
-				currentTime := time.Now().UTC()
-				bombCreatedAt := bomb.CreatedAt
-				diff := currentTime.Sub(bombCreatedAt).Nanoseconds() / int64(time.Millisecond)
+				currentTime := time.Now().UTC().Unix()
+				bombCreatedAt := bomb.CreatedAt.Unix()
+				diff := currentTime - bombCreatedAt
 
 				if diff > bomb.FireDelay {
 					removeBomb(bomb)

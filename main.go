@@ -14,7 +14,7 @@ import (
 	"math/rand"
 )
 
-var appVersion = "1.0.22"
+var appVersion = "1.0.23"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex
@@ -315,7 +315,7 @@ func (p *Player) createBombAddedMessage(bomb *Bomb) BombAddedMessage {
 		playerID = bomb.Player.Id
 	}
 
-	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: getMillisecondsFromTime(bomb.CreatedAt), FireDelay: bomb.FireDelay, FireLength: bomb.FireLength, Player: playerID}
+	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: bomb.CreatedAt.Unix(), FireDelay: bomb.FireDelay, FireLength: bomb.FireLength, Player: playerID}
 }
 
 func (p *Player) createBombFiredMessage(bomb *Bomb) BombFiredMessage {

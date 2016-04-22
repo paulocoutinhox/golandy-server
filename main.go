@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"golang.org/x/net/websocket"
 	"math/rand"
+	"path/filepath"
 )
 
 var appVersion = "1.0.23"
@@ -19,6 +20,7 @@ var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex
 var bombsMU sync.Mutex
+var tickerAddBombs = time.NewTicker(time.Millisecond * 5000)
 
 /*
 var validateOrigin = false
@@ -169,10 +171,10 @@ type Player struct {
 	CharType         string
 	Direction        int
 	MovementDelay    int64
-	LastMovementTime time.Time
-	LastPingTime     time.Time
+	LastMovementTime int64
+	LastPingTime     int64
 	Map              string
-	LastAddBombTime  time.Time
+	LastAddBombTime  int64
 	AddBombDelay     int64
 	Online           bool
 
@@ -187,8 +189,8 @@ type Bomb struct {
 	BombType         string
 	Direction        int
 	MovementDelay    int64
-	LastMovementTime time.Time
-	CreatedAt        time.Time
+	LastMovementTime int64
+	CreatedAt        int64
 	FireLength       int
 	FireDelay        int64
 	Player           *Player
@@ -201,6 +203,10 @@ type Point struct {
 
 func debug(message string) {
 	log.Printf("> %s\n", message)
+}
+
+func debugf(format string, params ...interface{}) {
+	log.Printf(fmt.Sprintf("> " + format + "\n", params))
 }
 
 func removePlayer(player *Player) {
@@ -264,8 +270,21 @@ func inPointList(desiredX, desiredY int, list []*Point) bool {
 }
 
 func randomInt(min, max int) int {
-	rand.Seed(time.Now().Unix())
 	return rand.Intn(max - min) + min
+}
+
+func getCurrentTimestamp() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
+func createBombAddedMessage(bomb *Bomb) BombAddedMessage {
+	playerID := ""
+
+	if bomb.Player != nil {
+		playerID = bomb.Player.Id
+	}
+
+	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: bomb.CreatedAt, FireDelay: bomb.FireDelay, FireLength: bomb.FireLength, Player: playerID}
 }
 
 func (p *Player) createSimpleMessage(messageType string) SimpleMessage {
@@ -301,9 +320,9 @@ func (p *Player) createPlayerRemovedMessage() PlayerRemovedMessage {
 }
 
 func (p *Player) createPongMessage() PongMessage {
-	currentTime := time.Now().UTC().Unix()
-	lastPingTime := p.LastPingTime.Unix()
-	diff := currentTime / lastPingTime
+	currentTime := getCurrentTimestamp()
+	lastPingTime := p.LastPingTime
+	diff := currentTime - lastPingTime
 
 	return PongMessage{Type: "pong", Time: diff}
 }
@@ -315,7 +334,7 @@ func (p *Player) createBombAddedMessage(bomb *Bomb) BombAddedMessage {
 		playerID = bomb.Player.Id
 	}
 
-	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: bomb.CreatedAt.Unix(), FireDelay: bomb.FireDelay, FireLength: bomb.FireLength, Player: playerID}
+	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: bomb.CreatedAt, FireDelay: bomb.FireDelay, FireLength: bomb.FireLength, Player: playerID}
 }
 
 func (p *Player) createBombFiredMessage(bomb *Bomb) BombFiredMessage {
@@ -355,17 +374,17 @@ func (p *Player) sendToAll(v interface{}) {
 }
 
 func (p *Player) updateLastMovementTime() {
-	p.LastMovementTime = time.Now().UTC()
+	p.LastMovementTime = getCurrentTimestamp()
 }
 
 func (p *Player) updateLastPingTime() {
-	p.LastPingTime = time.Now().UTC()
+	p.LastPingTime = getCurrentTimestamp()
 }
 
 func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	// valida o tempo
-	currentTime := time.Now().UTC().Unix()
-	lastMovementTime := p.LastMovementTime.Unix()
+	currentTime := getCurrentTimestamp()
+	lastMovementTime := p.LastMovementTime
 	diff := currentTime - lastMovementTime
 
 	if diff <= p.MovementDelay {
@@ -401,8 +420,8 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 
 func (p *Player) canAddBombTo(toX, toY int) bool {
 	// valida o tempo
-	currentTime := time.Now().UTC().Unix()
-	lastAddBombTime := p.LastAddBombTime.Unix()
+	currentTime := getCurrentTimestamp()
+	lastAddBombTime := p.LastAddBombTime
 	diff := currentTime - lastAddBombTime
 
 	if diff <= p.AddBombDelay {
@@ -446,13 +465,13 @@ func wsHandler(ws *websocket.Conn) {
 	player.Id = uuid.New()
 	player.Socket = ws
 
-	player.Map = "001"
+	player.Map = "map0001"
 	player.CharType = "002"
 	player.Direction = 3
 	player.MovementDelay = 200 //float64(randomInt(50, 200))
-	player.LastMovementTime = time.Now().UTC()
-	player.LastPingTime = time.Now().UTC()
-	player.LastAddBombTime = time.Now().UTC()
+	player.LastMovementTime = getCurrentTimestamp()
+	player.LastPingTime = getCurrentTimestamp()
+	player.LastAddBombTime = getCurrentTimestamp()
 	player.AddBombDelay = 1000
 	player.Online = false
 	player.X = 0
@@ -526,9 +545,6 @@ func wsHandler(ws *websocket.Conn) {
 				}
 
 				if player.canMoveTo(toX, toY, toDirection) {
-					debug(player.LastMovementTime.String())
-					debug(time.Now().UTC().String())
-
 					player.updateLastMovementTime()
 
 					player.X = toX
@@ -659,7 +675,7 @@ func wsHandler(ws *websocket.Conn) {
 				}
 
 				if (player.canAddBombTo(bombX, bombY)) {
-					player.LastAddBombTime = time.Now().UTC()
+					player.LastAddBombTime = getCurrentTimestamp()
 
 					bomb := &Bomb{
 						Id: uuid.New(),
@@ -668,8 +684,8 @@ func wsHandler(ws *websocket.Conn) {
 						BombType: "001",
 						Direction: 1,
 						MovementDelay: 0,
-						LastMovementTime: time.Now().UTC(),
-						CreatedAt: time.Now().UTC(),
+						LastMovementTime: getCurrentTimestamp(),
+						CreatedAt: getCurrentTimestamp(),
 						FireDelay: 2000,
 						FireLength: 3,
 						Player: player,
@@ -710,28 +726,54 @@ func wsHandler(ws *websocket.Conn) {
 }
 
 func loadMaps() {
-	file, err := ioutil.ReadFile("maps/map1.json")
+	debug("Loading map files...")
 
-	if err != nil {
-		debug(fmt.Sprintf("Failed to load map: %v", err))
+	// geral
+	path := "maps/*.json"
+	fileList, err := filepath.Glob(path)
+
+	if (err != nil) {
+		debugf("Failed to load map files: %v", err)
 		os.Exit(1)
 	}
 
-	var m Map
-	json.Unmarshal(file, &m)
+	debugf("Map files found: %v", len(fileList))
 
-	maps["001"] = &m
+	// carrega todos os arquivos
+	for _, mapFile := range fileList {
+		debugf("Loading map: %s", mapFile)
 
-	for _, currentMap := range maps {
-		for currentLayerKey, currentLayer := range currentMap.Layers {
+		file, err := ioutil.ReadFile(mapFile)
+		fileName := filepath.Base(mapFile)
+		fileExtension := filepath.Ext(mapFile)
+		fileNameBase := fileName[0:len(fileName) - len(fileExtension)]
+
+		if err != nil {
+			debugf("Failed to load map: %s - %v", fileName, err)
+			os.Exit(1)
+		}
+
+		var m Map
+		json.Unmarshal(file, &m)
+
+		// remove todas as layers que não usamos
+		debugf("Removing unused layers from map: %s...", fileName)
+
+		for currentLayerKey, currentLayer := range m.Layers {
 			if currentLayer.Name != "Meta" {
-				currentMap.Layers = append(currentMap.Layers[:currentLayerKey], currentMap.Layers[currentLayerKey + 1:]...)
+				m.Layers = append(m.Layers[:currentLayerKey], m.Layers[currentLayerKey + 1:]...)
 			}
 		}
+
+		maps[fileNameBase] = &m
+
+		debugf("Map %s loaded", fileName);
 	}
 }
 
 func main() {
+	rand.Seed(time.Now().UTC().UnixNano())
+
 	loadMaps()
 
 	/*
@@ -759,8 +801,10 @@ func main() {
 
 		for range tickerBombs.C {
 			for _, bomb := range Bombs {
-				currentTime := time.Now().UTC().Unix()
-				bombCreatedAt := bomb.CreatedAt.Unix()
+				debugf("Bombs to proccess: %d", len(Bombs))
+
+				currentTime := getCurrentTimestamp()
+				bombCreatedAt := bomb.CreatedAt
 				diff := currentTime - bombCreatedAt
 
 				if diff > bomb.FireDelay {
@@ -800,6 +844,42 @@ func main() {
 					}
 				}
 			}
+		}
+	}()
+
+	go func() {
+		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		// essa rotina adiciona bombas aleatoriamente de teste
+		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+		for range tickerAddBombs.C {
+			mapName := "map0001"
+			bombX := randomInt(0, maps[mapName].Layers[0].Width - 1)
+			bombY := randomInt(0, maps[mapName].Layers[0].Height - 1)
+
+			bomb := &Bomb{
+				Id: uuid.New(),
+				X: bombX,
+				Y: bombY,
+				BombType: "001",
+				Direction: 1,
+				MovementDelay: 0,
+				LastMovementTime: getCurrentTimestamp(),
+				CreatedAt: getCurrentTimestamp(),
+				FireDelay: 2000,
+				FireLength: 3,
+				Player: nil,
+			}
+
+			addBomb(bomb)
+
+			go func() {
+				for _, p := range Players {
+					if err := p.send(createBombAddedMessage(bomb)); err != nil {
+						debug(fmt.Sprintf("Error on send command: %v", err))
+					}
+				}
+			}()
 		}
 	}()
 

@@ -16,7 +16,7 @@ import (
 	"math"
 )
 
-var appVersion = "1.0.24"
+var appVersion = "1.0.25"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex
@@ -274,6 +274,7 @@ func inPointList(desiredX, desiredY int, list []*Point) bool {
 }
 
 func randomInt(min, max int) int {
+	rand.Seed(time.Now().UTC().UnixNano())
 	return rand.Intn(max - min) + min
 }
 
@@ -805,8 +806,6 @@ func loadMaps() {
 }
 
 func main() {
-	rand.Seed(time.Now().UTC().UnixNano())
-
 	loadMaps()
 
 	/*
@@ -902,7 +901,7 @@ func main() {
 				LastMovementTime: getCurrentTimestamp(),
 				CreatedAt: getCurrentTimestamp(),
 				FireDelay: 2000,
-				FireLength: 3,
+				FireLength: randomInt(1, 9),
 				Player: nil,
 			}
 
@@ -924,11 +923,18 @@ func main() {
 		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 		for range tickerAddNPC.C {
-			if quantityOfNPCs() >= maxQuantityOfNPCs {
-				return
+			quantityOfNPCs := quantityOfNPCs()
+
+			if quantityOfNPCs >= maxQuantityOfNPCs {
+				debugf("Cannot add more NPCs: %d", quantityOfNPCs)
+				continue
 			}
 
-			charType := "002"
+			debugf("Quantity of NPCs: %d", quantityOfNPCs)
+
+			charTypeRand := randomInt(3, 6)
+			charType := fmt.Sprintf("00%d", charTypeRand)
+
 			mapName := "map0001"
 			playerX := randomInt(0, maps[mapName].Layers[0].Width - 1)
 			playerY := randomInt(0, maps[mapName].Layers[0].Height - 1)
@@ -1019,7 +1025,7 @@ func main() {
 										LastMovementTime: getCurrentTimestamp(),
 										CreatedAt: getCurrentTimestamp(),
 										FireDelay: 2000,
-										FireLength: 3,
+										FireLength: randomInt(1, 9),
 										Player: player,
 									}
 
@@ -1027,7 +1033,7 @@ func main() {
 
 									go func() {
 										for _, p := range Players {
-											if err := p.send(createBombAddedMessage(bomb)); err != nil {
+											if err := p.send(player.createBombAddedMessage(bomb)); err != nil {
 												debug(fmt.Sprintf("Error on send command: %v", err))
 											}
 										}

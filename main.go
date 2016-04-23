@@ -938,7 +938,7 @@ func main() {
 			player.Map = mapName
 			player.CharType = charType
 			player.Direction = 3
-			player.MovementDelay = 500
+			player.MovementDelay = int64(randomInt(200, 1000))
 			player.LastMovementTime = getCurrentTimestamp()
 			player.LastPingTime = getCurrentTimestamp()
 			player.LastAddBombTime = getCurrentTimestamp()

@@ -13,14 +13,17 @@ import (
 	"golang.org/x/net/websocket"
 	"math/rand"
 	"path/filepath"
+	"math"
 )
 
-var appVersion = "1.0.23"
+var appVersion = "1.0.24"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex
 var bombsMU sync.Mutex
+var maxQuantityOfNPCs = 10
 var tickerAddBombs = time.NewTicker(time.Millisecond * 5000)
+var tickerAddNPC = time.NewTicker(time.Millisecond * 5000)
 
 /*
 var validateOrigin = false
@@ -176,6 +179,7 @@ type Player struct {
 	Map              string
 	LastAddBombTime  int64
 	AddBombDelay     int64
+	NPC              bool
 	Online           bool
 
 	Socket           *websocket.Conn
@@ -287,6 +291,20 @@ func createBombAddedMessage(bomb *Bomb) BombAddedMessage {
 	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: bomb.CreatedAt, FireDelay: bomb.FireDelay, FireLength: bomb.FireLength, Player: playerID}
 }
 
+
+func quantityOfNPCs() int {
+	total := 0
+
+	for _, player := range Players {
+		if player.NPC {
+			total += 1
+		}
+	}
+
+	return total
+}
+
+
 func (p *Player) createSimpleMessage(messageType string) SimpleMessage {
 	return SimpleMessage{Type: messageType}
 }
@@ -354,6 +372,10 @@ func (p *Player) createBombAddInvalidMessage(bombX, bombY int) BombAddInvalidMes
 func (p *Player) send(v interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if p.Socket == nil {
+		return nil
+	}
 
 	debug(fmt.Sprintf("Message sent: %v", v))
 	return websocket.JSON.Send(p.Socket, v)
@@ -456,6 +478,16 @@ func (p *Player) canAddBombTo(toX, toY int) bool {
 	return true
 }
 
+func (p *Player) isNearOf(fromPlayer *Player, maxDistance int) bool {
+	isNear := false
+
+	if math.Abs(float64(p.X - fromPlayer.X)) <= float64(maxDistance) && math.Abs(float64(p.Y - fromPlayer.Y)) <= float64(maxDistance) {
+		isNear = true
+	}
+
+	return isNear
+}
+
 func wsHandler(ws *websocket.Conn) {
 	// faz o upgrade da conexão pra websocket
 	debug(fmt.Sprintf("New connection from: %+v", ws.RemoteAddr()))
@@ -474,6 +506,7 @@ func wsHandler(ws *websocket.Conn) {
 	player.LastAddBombTime = getCurrentTimestamp()
 	player.AddBombDelay = 1000
 	player.Online = false
+	player.NPC = false
 	player.X = 0
 	player.Y = 0
 
@@ -767,7 +800,7 @@ func loadMaps() {
 
 		maps[fileNameBase] = &m
 
-		debugf("Map %s loaded", fileName);
+		debugf("Map %s loaded", fileName)
 	}
 }
 
@@ -835,7 +868,7 @@ func main() {
 								debug(fmt.Sprintf("Error on send command: %v", err))
 							}
 
-							p.sendToAll(p.createPlayerDeadMessage());
+							p.sendToAll(p.createPlayerDeadMessage())
 						} else {
 							if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
 								debug(fmt.Sprintf("Error on send command: %v", err))
@@ -849,7 +882,7 @@ func main() {
 
 	go func() {
 		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-		// essa rotina adiciona bombas aleatoriamente de teste
+		// essa rotina adiciona bombas aleatoriamente
 		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 		for range tickerAddBombs.C {
@@ -878,6 +911,131 @@ func main() {
 					if err := p.send(createBombAddedMessage(bomb)); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
 					}
+				}
+			}()
+		}
+	}()
+
+	go func() {
+		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		// essa rotina adiciona npcs aleatoriamente
+		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+		for range tickerAddNPC.C {
+			if quantityOfNPCs() >= maxQuantityOfNPCs {
+				return
+			}
+
+			charType := "002"
+			mapName := "map0001"
+			playerX := randomInt(0, maps[mapName].Layers[0].Width - 1)
+			playerY := randomInt(0, maps[mapName].Layers[0].Height - 1)
+
+			player := new(Player)
+			player.Id = uuid.New()
+			player.Socket = nil
+
+			player.Map = mapName
+			player.CharType = charType
+			player.Direction = 3
+			player.MovementDelay = 500
+			player.LastMovementTime = getCurrentTimestamp()
+			player.LastPingTime = getCurrentTimestamp()
+			player.LastAddBombTime = getCurrentTimestamp()
+			player.AddBombDelay = 5000
+			player.Online = true
+			player.X = playerX
+			player.Y = playerY
+			player.NPC = true
+
+			addPlayer(player)
+
+			go func() {
+				for _, p := range Players {
+					if err := p.send(player.createPlayerAddedMessage()); err != nil {
+						debug(fmt.Sprintf("Error on send command: %v", err))
+					}
+				}
+			}()
+
+			go func() {
+				for player != nil && player.Online {
+					toDirection := randomInt(0, 4)
+					toDirection += 1
+
+					toX := player.X
+					toY := player.Y
+
+					if toDirection == 1 {
+						toY = player.Y - 1
+					} else if toDirection == 2 {
+						toX = player.X + 1
+					} else if toDirection == 3 {
+						toY = player.Y + 1
+					} else if toDirection == 4 {
+						toX = player.X - 1
+					}
+
+					if toX > (maps[mapName].Layers[0].Width - 1) {
+						toX = (maps[mapName].Layers[0].Width - 1)
+					} else if toY > (maps[mapName].Layers[0].Height - 1) {
+						toY = (maps[mapName].Layers[0].Height - 1)
+					} else if toX < 0 {
+						toX = 0
+					} else if toY < 0 {
+						toY = 0
+					}
+
+					sleepDuration := time.Duration(player.MovementDelay * int64(time.Millisecond))
+
+					if player.canMoveTo(toX, toY, toDirection) {
+						player.updateLastMovementTime()
+
+						player.X = toX
+						player.Y = toY
+						player.Direction = toDirection
+
+						player.sendToAll(player.createPositionMessage(false))
+					}
+
+					for _, p := range Players {
+						if p.Id != player.Id {
+							if player.isNearOf(p, 2) {
+								bombX := player.X
+								bombY := player.Y
+
+								if player.canAddBombTo(bombX, bombY) {
+									player.LastAddBombTime = getCurrentTimestamp()
+
+									bomb := &Bomb{
+										Id: uuid.New(),
+										X: bombX,
+										Y: bombY,
+										BombType: "001",
+										Direction: 1,
+										MovementDelay: 0,
+										LastMovementTime: getCurrentTimestamp(),
+										CreatedAt: getCurrentTimestamp(),
+										FireDelay: 2000,
+										FireLength: 3,
+										Player: player,
+									}
+
+									addBomb(bomb)
+
+									go func() {
+										for _, p := range Players {
+											if err := p.send(createBombAddedMessage(bomb)); err != nil {
+												debug(fmt.Sprintf("Error on send command: %v", err))
+											}
+										}
+									}()
+								}
+							}
+						}
+					}
+
+					time.Sleep(sleepDuration)
 				}
 			}()
 		}

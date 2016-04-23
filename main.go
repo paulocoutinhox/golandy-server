@@ -869,6 +869,8 @@ func main() {
 							}
 
 							p.sendToAll(p.createPlayerDeadMessage())
+
+							removePlayer(p)
 						} else {
 							if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
 								debug(fmt.Sprintf("Error on send command: %v", err))

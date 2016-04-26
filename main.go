@@ -16,7 +16,7 @@ import (
 	"math"
 )
 
-var appVersion = "1.0.25"
+var appVersion = "1.0.26"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex
@@ -499,7 +499,7 @@ func wsHandler(ws *websocket.Conn) {
 	player.Socket = ws
 
 	player.Map = "map0001"
-	player.CharType = "002"
+	player.CharType = "007"
 	player.Direction = 3
 	player.MovementDelay = 200 //float64(randomInt(50, 200))
 	player.LastMovementTime = getCurrentTimestamp()

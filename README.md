@@ -14,4 +14,10 @@ go build
 ./golandy-server
 ```
 
+**Author WebSite**
 
+> http://www.pcoutinho.com
+
+**License**
+
+MIT

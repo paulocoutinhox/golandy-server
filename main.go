@@ -16,7 +16,7 @@ import (
 	"math"
 )
 
-var appVersion = "1.0.26"
+var appVersion = "1.0.27"
 var maps = make(map[string]*Map)
 var tickerBombs = time.NewTicker(time.Millisecond * 500)
 var playersMU sync.Mutex
@@ -735,7 +735,7 @@ func wsHandler(ws *websocket.Conn) {
 						}
 					}()
 
-					debug("Added and published")
+					debug(fmt.Sprintf("Added and published (ID: %v", bomb.Id))
 				} else {
 					if err = player.send(player.createBombAddInvalidMessage(bombX, bombY)); err != nil {
 						debug(fmt.Sprintf("Error on send command: %v", err))
@@ -840,6 +840,8 @@ func main() {
 				diff := currentTime - bombCreatedAt
 
 				if diff > bomb.FireDelay {
+					debug(fmt.Sprintf("Bomb to be removed (ID: %v", bomb.Id))
+
 					removeBomb(bomb)
 
 					var explosionPointList = make([]*Point, 0)
@@ -853,15 +855,17 @@ func main() {
 					}
 
 					for _, p := range Players {
+						debug(fmt.Sprintf("Sending bomb-fired command to: %v", p.Id))
+
 						collidedWithPlayer := inPointList(p.X, p.Y, explosionPointList)
 						var err error
 
+						if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
+							debug(fmt.Sprintf("Error on send command: %v", err))
+						}
+
 						if collidedWithPlayer {
 							p.Online = false
-
-							if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
-								debug(fmt.Sprintf("Error on send command: %v", err))
-							}
 
 							if err = p.send(p.createSimpleMessage("dead")); err != nil {
 								debug(fmt.Sprintf("Error on send command: %v", err))
@@ -870,10 +874,6 @@ func main() {
 							p.sendToAll(p.createPlayerDeadMessage())
 
 							removePlayer(p)
-						} else {
-							if err = p.send(p.createBombFiredMessage(bomb)); err != nil {
-								debug(fmt.Sprintf("Error on send command: %v", err))
-							}
 						}
 					}
 				}

@@ -855,7 +855,7 @@ func main() {
 					}
 
 					for _, p := range Players {
-						debug(fmt.Sprintf("Sending bomb-fired command to: %v", p.Id))
+						//debug(fmt.Sprintf("Sending bomb-fired command to: %v", p.Id))
 
 						collidedWithPlayer := inPointList(p.X, p.Y, explosionPointList)
 						var err error

@@ -36,3 +36,9 @@ update:
 
 showprocess:
 	ps aux | grep golandy-server
+
+docker-build:
+	docker build -t "golandy-server" ./docker/ 
+
+docker-run:
+	docker run -it "golandy-server" bash

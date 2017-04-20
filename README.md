@@ -2,7 +2,7 @@
 [![Support with donation](http://donation.pcoutinho.com/images/donate-button.png)](http://donation.pcoutinho.com/)
 
 # Golandy Server    
-golandy.prsolucoes.com    
+http://golandy.prsolucoes.com    
 
 **STARTING THE SERVER**
 

@@ -11,3 +11,4 @@ RUN /bin/echo -e "LANG=\"en_US.UTF-8\"" > /etc/default/local
 # get project
 RUN go get -u github.com/prsolucoes/golandy-server
 RUN go install github.com/prsolucoes/golandy-server
+WORKDIR github.com/prsolucoes/golandy-server

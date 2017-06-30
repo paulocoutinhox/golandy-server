@@ -213,7 +213,9 @@ func debug(message string) {
 }
 
 func debugf(format string, params ...interface{}) {
-	log.Printf(fmt.Sprintf("> "+format+"\n", params))
+	if debugLogEnabled {
+		log.Printf(fmt.Sprintf("> " + format + "\n", params))
+	}
 }
 
 func removePlayer(player *Player) {

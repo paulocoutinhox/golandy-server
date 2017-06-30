@@ -1,19 +1,19 @@
 package main
 
 import (
-	"github.com/pborman/uuid"
-	"log"
-	"net/http"
-	"sync"
-	"fmt"
 	"encoding/json"
-	"time"
-	"os"
-	"io/ioutil"
+	"fmt"
+	"github.com/pborman/uuid"
 	"golang.org/x/net/websocket"
-	"math/rand"
-	"path/filepath"
+	"io/ioutil"
+	"log"
 	"math"
+	"math/rand"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
 )
 
 var appVersion = "1.0.27"
@@ -24,6 +24,7 @@ var bombsMU sync.Mutex
 var maxQuantityOfNPCs = 10
 var tickerAddBombs = time.NewTicker(time.Millisecond * 5000)
 var tickerAddNPC = time.NewTicker(time.Millisecond * 5000)
+var debugLogEnabled = false
 
 /*
 var validateOrigin = false
@@ -47,8 +48,8 @@ var Players = make([]*Player, 0)
 var Bombs = make([]*Bomb, 0)
 
 type Map struct {
-	Height       int `json:"height"`
-	Layers       []struct {
+	Height int `json:"height"`
+	Layers []struct {
 		Data    []int  `json:"data"`
 		Height  int    `json:"height"`
 		Name    string `json:"name"`
@@ -76,9 +77,9 @@ type Map struct {
 		Tileheight  int    `json:"tileheight"`
 		Tilewidth   int    `json:"tilewidth"`
 	} `json:"tilesets"`
-	Tilewidth    int `json:"tilewidth"`
-	Version      int `json:"version"`
-	Width        int `json:"width"`
+	Tilewidth int `json:"tilewidth"`
+	Version   int `json:"version"`
+	Width     int `json:"width"`
 }
 
 type SimpleMessage struct {
@@ -87,23 +88,23 @@ type SimpleMessage struct {
 
 type PongMessage struct {
 	Type string `json:"type"`
-	Time int64 `json:"time"`
+	Time int64  `json:"time"`
 }
 
 type PlayerPositionMessage struct {
 	Type      string `json:"type"`
 	Id        string `json:"id"`
-	X         int `json:"x"`
-	Y         int `json:"y"`
-	Direction int `json:"direction"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Direction int    `json:"direction"`
 }
 
 type PlayerMoveOkMessage struct {
 	Type      string `json:"type"`
 	Id        string `json:"id"`
-	X         int `json:"x"`
-	Y         int `json:"y"`
-	Direction int `json:"direction"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Direction int    `json:"direction"`
 }
 
 type PlayerRemovedMessage struct {
@@ -114,56 +115,56 @@ type PlayerRemovedMessage struct {
 type PlayerInvalidPositionMessage struct {
 	Type        string `json:"type"`
 	Id          string `json:"id"`
-	X           int `json:"x"`
-	Y           int `json:"y"`
-	Direction   int `json:"direction"`
-	ToX         int `json:"toX"`
-	ToY         int `json:"toY"`
-	ToDirection int `json:"toDirection"`
+	X           int    `json:"x"`
+	Y           int    `json:"y"`
+	Direction   int    `json:"direction"`
+	ToX         int    `json:"toX"`
+	ToY         int    `json:"toY"`
+	ToDirection int    `json:"toDirection"`
 }
 
 type PlayerDataMessage struct {
 	Type          string `json:"type"`
 	Id            string `json:"id"`
-	X             int `json:"x"`
-	Y             int `json:"y"`
+	X             int    `json:"x"`
+	Y             int    `json:"y"`
 	CharType      string `json:"charType"`
-	Direction     int `json:"direction"`
-	MovementDelay int64 `json:"movementDelay"`
+	Direction     int    `json:"direction"`
+	MovementDelay int64  `json:"movementDelay"`
 	Map           string `json:"map"`
-	AddBombDelay  int64 `json:"addBombDelay"`
+	AddBombDelay  int64  `json:"addBombDelay"`
 }
 
 type BombAddedMessage struct {
 	Type          string `json:"type"`
 	Id            string `json:"id"`
-	X             int `json:"x"`
-	Y             int `json:"y"`
+	X             int    `json:"x"`
+	Y             int    `json:"y"`
 	BombType      string `json:"bombType"`
-	Direction     int `json:"direction"`
-	MovementDelay int64 `json:"movementDelay"`
-	CreatedAt     int64 `json:"createdAt"`
-	FireDelay     int64 `json:"fireDelay"`
-	FireLength    int `json:"fireLength"`
+	Direction     int    `json:"direction"`
+	MovementDelay int64  `json:"movementDelay"`
+	CreatedAt     int64  `json:"createdAt"`
+	FireDelay     int64  `json:"fireDelay"`
+	FireLength    int    `json:"fireLength"`
 	Player        string `json:"player"`
 }
 
 type BombAddInvalidMessage struct {
 	Type string `json:"type"`
-	X    int `json:"x"`
-	Y    int `json:"y"`
-	ToX  int `json:"toX"`
-	ToY  int `json:"toY"`
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+	ToX  int    `json:"toX"`
+	ToY  int    `json:"toY"`
 }
 
 type BombFiredMessage struct {
 	Type       string `json:"type"`
 	Id         string `json:"id"`
-	X          int `json:"x"`
-	Y          int `json:"y"`
+	X          int    `json:"x"`
+	Y          int    `json:"y"`
 	BombType   string `json:"bombType"`
-	Direction  int `json:"direction"`
-	FireLength int `json:"fireLength"`
+	Direction  int    `json:"direction"`
+	FireLength int    `json:"fireLength"`
 	Player     string `json:"player"`
 }
 
@@ -182,8 +183,8 @@ type Player struct {
 	NPC              bool
 	Online           bool
 
-	Socket           *websocket.Conn
-	mu               sync.Mutex
+	Socket *websocket.Conn
+	mu     sync.Mutex
 }
 
 type Bomb struct {
@@ -206,11 +207,13 @@ type Point struct {
 }
 
 func debug(message string) {
-	log.Printf("> %s\n", message)
+	if debugLogEnabled {
+		log.Printf("> %s\n", message)
+	}
 }
 
 func debugf(format string, params ...interface{}) {
-	log.Printf(fmt.Sprintf("> " + format + "\n", params))
+	log.Printf(fmt.Sprintf("> "+format+"\n", params))
 }
 
 func removePlayer(player *Player) {
@@ -219,7 +222,7 @@ func removePlayer(player *Player) {
 
 	for i, p := range Players {
 		if p.Id == player.Id {
-			Players = append(Players[:i], Players[i + 1:]...)
+			Players = append(Players[:i], Players[i+1:]...)
 		}
 	}
 }
@@ -237,7 +240,7 @@ func removeBomb(bomb *Bomb) {
 
 	for i, b := range Bombs {
 		if b.Id == bomb.Id {
-			Bombs = append(Bombs[:i], Bombs[i + 1:]...)
+			Bombs = append(Bombs[:i], Bombs[i+1:]...)
 		}
 	}
 }
@@ -253,7 +256,7 @@ func isTileBlocking(mapType string, x, y int) bool {
 	bombsMU.Lock()
 	defer bombsMU.Unlock()
 
-	var idx = x + y * maps[mapType].Layers[0].Width
+	var idx = x + y*maps[mapType].Layers[0].Width
 	var gid = maps[mapType].Layers[0].Data[idx]
 
 	if gid > 0 {
@@ -275,7 +278,7 @@ func inPointList(desiredX, desiredY int, list []*Point) bool {
 
 func randomInt(min, max int) int {
 	rand.Seed(time.Now().UTC().UnixNano())
-	return rand.Intn(max - min) + min
+	return rand.Intn(max-min) + min
 }
 
 func getCurrentTimestamp() int64 {
@@ -292,7 +295,6 @@ func createBombAddedMessage(bomb *Bomb) BombAddedMessage {
 	return BombAddedMessage{Type: "bomb-added", Id: bomb.Id, X: bomb.X, Y: bomb.Y, BombType: bomb.BombType, Direction: bomb.Direction, MovementDelay: bomb.MovementDelay, CreatedAt: bomb.CreatedAt, FireDelay: bomb.FireDelay, FireLength: bomb.FireLength, Player: playerID}
 }
 
-
 func quantityOfNPCs() int {
 	total := 0
 
@@ -304,7 +306,6 @@ func quantityOfNPCs() int {
 
 	return total
 }
-
 
 func (p *Player) createSimpleMessage(messageType string) SimpleMessage {
 	return SimpleMessage{Type: messageType}
@@ -424,16 +425,16 @@ func (p *Player) canMoveTo(toX, toY, toDirection int) bool {
 	}
 
 	// valida a posição
-	if (toX > (p.X + 1)) {
+	if toX > (p.X + 1) {
 		debug("Player cannot move (invalid position - too far)")
 		return false
-	} else if (toX < (p.X - 1)) {
+	} else if toX < (p.X - 1) {
 		debug("Player cannot move (invalid position - too far)")
 		return false
-	} else if (toY < (p.Y - 1)) {
+	} else if toY < (p.Y - 1) {
 		debug("Player cannot move (invalid position - too far)")
 		return false
-	} else if (toY > (p.Y + 1)) {
+	} else if toY > (p.Y + 1) {
 		debug("Player cannot move (invalid position - too far)")
 		return false
 	}
@@ -453,7 +454,7 @@ func (p *Player) canAddBombTo(toX, toY int) bool {
 	}
 
 	// valida o tile
-	var idx = toX + toY * maps[p.Map].Layers[0].Width
+	var idx = toX + toY*maps[p.Map].Layers[0].Width
 	var gid = maps[p.Map].Layers[0].Data[idx]
 
 	if gid > 0 {
@@ -462,16 +463,16 @@ func (p *Player) canAddBombTo(toX, toY int) bool {
 	}
 
 	// valida a posição
-	if (toX > (p.X + 1)) {
+	if toX > (p.X + 1) {
 		debug("Player cannot add bomb (invalid position - too far)")
 		return false
-	} else if (toX < (p.X - 1)) {
+	} else if toX < (p.X - 1) {
 		debug("Player cannot add bomb (invalid position - too far)")
 		return false
-	} else if (toY < (p.Y - 1)) {
+	} else if toY < (p.Y - 1) {
 		debug("Player cannot add bomb (invalid position - too far)")
 		return false
-	} else if (toY > (p.Y + 1)) {
+	} else if toY > (p.Y + 1) {
 		debug("Player cannot add bomb (invalid position - too far)")
 		return false
 	}
@@ -482,7 +483,7 @@ func (p *Player) canAddBombTo(toX, toY int) bool {
 func (p *Player) isNearOf(fromPlayer *Player, maxDistance int) bool {
 	isNear := false
 
-	if math.Abs(float64(p.X - fromPlayer.X)) <= float64(maxDistance) && math.Abs(float64(p.Y - fromPlayer.Y)) <= float64(maxDistance) {
+	if math.Abs(float64(p.X-fromPlayer.X)) <= float64(maxDistance) && math.Abs(float64(p.Y-fromPlayer.Y)) <= float64(maxDistance) {
 		isNear = true
 	}
 
@@ -658,8 +659,8 @@ func wsHandler(ws *websocket.Conn) {
 				var playerPosY = 0
 
 				for tileBlocking {
-					playerPosX = randomInt(0, maps[player.Map].Layers[0].Width - 1)
-					playerPosY = randomInt(0, maps[player.Map].Layers[0].Height - 1)
+					playerPosX = randomInt(0, maps[player.Map].Layers[0].Width-1)
+					playerPosY = randomInt(0, maps[player.Map].Layers[0].Height-1)
 					tileBlocking = isTileBlocking(player.Map, playerPosX, playerPosY)
 
 					if !tileBlocking {
@@ -708,21 +709,21 @@ func wsHandler(ws *websocket.Conn) {
 					bombY = int(value.(float64))
 				}
 
-				if (player.canAddBombTo(bombX, bombY)) {
+				if player.canAddBombTo(bombX, bombY) {
 					player.LastAddBombTime = getCurrentTimestamp()
 
 					bomb := &Bomb{
-						Id: uuid.New(),
-						X: bombX,
-						Y: bombY,
-						BombType: "001",
-						Direction: 1,
-						MovementDelay: 0,
+						Id:               uuid.New(),
+						X:                bombX,
+						Y:                bombY,
+						BombType:         "001",
+						Direction:        1,
+						MovementDelay:    0,
 						LastMovementTime: getCurrentTimestamp(),
-						CreatedAt: getCurrentTimestamp(),
-						FireDelay: 2000,
-						FireLength: 3,
-						Player: player,
+						CreatedAt:        getCurrentTimestamp(),
+						FireDelay:        2000,
+						FireLength:       3,
+						Player:           player,
 					}
 
 					addBomb(bomb)
@@ -745,16 +746,16 @@ func wsHandler(ws *websocket.Conn) {
 		}
 
 		/*
-		go func() {
-			for _, p := range Players {
-				if p.Id != player.Id {
-					if err = p.send(player.createPositionMessage(false)); err != nil {
-						debug(fmt.Sprintf("Error on send command: %v", err))
+			go func() {
+				for _, p := range Players {
+					if p.Id != player.Id {
+						if err = p.send(player.createPositionMessage(false)); err != nil {
+							debug(fmt.Sprintf("Error on send command: %v", err))
+						}
 					}
-				}
 
-			}
-		}()
+				}
+			}()
 		*/
 	}
 }
@@ -766,7 +767,7 @@ func loadMaps() {
 	path := "maps/*.json"
 	fileList, err := filepath.Glob(path)
 
-	if (err != nil) {
+	if err != nil {
 		debugf("Failed to load map files: %v", err)
 		os.Exit(1)
 	}
@@ -780,7 +781,7 @@ func loadMaps() {
 		file, err := ioutil.ReadFile(mapFile)
 		fileName := filepath.Base(mapFile)
 		fileExtension := filepath.Ext(mapFile)
-		fileNameBase := fileName[0:len(fileName) - len(fileExtension)]
+		fileNameBase := fileName[0 : len(fileName)-len(fileExtension)]
 
 		if err != nil {
 			debugf("Failed to load map: %s - %v", fileName, err)
@@ -795,7 +796,7 @@ func loadMaps() {
 
 		for currentLayerKey, currentLayer := range m.Layers {
 			if currentLayer.Name != "Meta" {
-				m.Layers = append(m.Layers[:currentLayerKey], m.Layers[currentLayerKey + 1:]...)
+				m.Layers = append(m.Layers[:currentLayerKey], m.Layers[currentLayerKey+1:]...)
 			}
 		}
 
@@ -809,21 +810,21 @@ func main() {
 	loadMaps()
 
 	/*
-	gin.SetMode(gin.ReleaseMode)
+		gin.SetMode(gin.ReleaseMode)
 
-	r := gin.New()
-	r.Use(gin.Recovery())
+		r := gin.New()
+		r.Use(gin.Recovery())
 
-	r.GET("/ws", func(c *gin.Context) {
-		handler := websocket.Handler(wsHandler)
-		handler.ServeHTTP(c.Writer, c.Request)
+		r.GET("/ws", func(c *gin.Context) {
+			handler := websocket.Handler(wsHandler)
+			handler.ServeHTTP(c.Writer, c.Request)
 
-		wsHandler(c.Writer, c.Request)
-	})
+			wsHandler(c.Writer, c.Request)
+		})
 
-	r.Static("/static", "public")
+		r.Static("/static", "public")
 
-	r.Run(":3030")
+		r.Run(":3030")
 	*/
 
 	go func() {
@@ -888,21 +889,21 @@ func main() {
 
 		for range tickerAddBombs.C {
 			mapName := "map0001"
-			bombX := randomInt(0, maps[mapName].Layers[0].Width - 1)
-			bombY := randomInt(0, maps[mapName].Layers[0].Height - 1)
+			bombX := randomInt(0, maps[mapName].Layers[0].Width-1)
+			bombY := randomInt(0, maps[mapName].Layers[0].Height-1)
 
 			bomb := &Bomb{
-				Id: uuid.New(),
-				X: bombX,
-				Y: bombY,
-				BombType: "001",
-				Direction: 1,
-				MovementDelay: 0,
+				Id:               uuid.New(),
+				X:                bombX,
+				Y:                bombY,
+				BombType:         "001",
+				Direction:        1,
+				MovementDelay:    0,
 				LastMovementTime: getCurrentTimestamp(),
-				CreatedAt: getCurrentTimestamp(),
-				FireDelay: 2000,
-				FireLength: randomInt(1, 9),
-				Player: nil,
+				CreatedAt:        getCurrentTimestamp(),
+				FireDelay:        2000,
+				FireLength:       randomInt(1, 9),
+				Player:           nil,
 			}
 
 			addBomb(bomb)
@@ -936,8 +937,8 @@ func main() {
 			charType := fmt.Sprintf("00%d", charTypeRand)
 
 			mapName := "map0001"
-			playerX := randomInt(0, maps[mapName].Layers[0].Width - 1)
-			playerY := randomInt(0, maps[mapName].Layers[0].Height - 1)
+			playerX := randomInt(0, maps[mapName].Layers[0].Width-1)
+			playerY := randomInt(0, maps[mapName].Layers[0].Height-1)
 
 			player := new(Player)
 			player.Id = uuid.New()
@@ -1016,17 +1017,17 @@ func main() {
 									player.LastAddBombTime = getCurrentTimestamp()
 
 									bomb := &Bomb{
-										Id: uuid.New(),
-										X: bombX,
-										Y: bombY,
-										BombType: "001",
-										Direction: 1,
-										MovementDelay: 0,
+										Id:               uuid.New(),
+										X:                bombX,
+										Y:                bombY,
+										BombType:         "001",
+										Direction:        1,
+										MovementDelay:    0,
 										LastMovementTime: getCurrentTimestamp(),
-										CreatedAt: getCurrentTimestamp(),
-										FireDelay: 2000,
-										FireLength: randomInt(1, 9),
-										Player: player,
+										CreatedAt:        getCurrentTimestamp(),
+										FireDelay:        2000,
+										FireLength:       randomInt(1, 9),
+										Player:           player,
 									}
 
 									addBomb(bomb)

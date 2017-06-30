@@ -214,7 +214,7 @@ func debug(message string) {
 
 func debugf(format string, params ...interface{}) {
 	if debugLogEnabled {
-		log.Printf(fmt.Sprintf("> " + format + "\n", params))
+		log.Printf(fmt.Sprintf("> "+format+"\n", params))
 	}
 }
 

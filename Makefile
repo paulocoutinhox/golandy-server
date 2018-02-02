@@ -26,7 +26,7 @@ stop:
 
 start:
 	-make stop
-	cd ${GOPATH}/src/bitbucket.org/prsolucoes/golandy-server
+	cd ${GOPATH}/src/github.com/prsolucoes/golandy-server
 	nohup ${EXECUTABLE} >> ${LOG_FILE} 2>&1 </dev/null &
 
 update:
